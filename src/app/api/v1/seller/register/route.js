@@ -21,10 +21,13 @@ export async function POST(request) {
     const ktpFile = formData.get('ktp');
     const selfieFile = formData.get('selfie');
     const password = formData.get('password');
+    const agreedTerms = formData.get('agreedTerms') === '1';
+    const productHalal = formData.get('productHalal') === '1';
 
     // Validate required fields
     if (!outletName || !outletPhone || !outletEmail || !bankName || 
-        !bankAccountNumber || !ktpFile || !selfieFile || !password) {
+        !bankAccountNumber || !ktpFile || !selfieFile || !password || 
+        !agreedTerms || !productHalal) {
       return withCORSHeaders(NextResponse.json(
         { success: false, message: 'All required fields must be provided' },
         { status: 400 }
@@ -77,6 +80,8 @@ export async function POST(request) {
       ktpImageUrl: ktpUrl[0],
       selfieImageUrl: selfieUrl[0],
       password: hashedPassword, // Store the hashed password
+      agreedTerms,
+      productHalal,
       status: 'pending',
       createdAt: new Date(),
       updatedAt: new Date(),
