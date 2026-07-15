@@ -137,17 +137,17 @@ export async function DELETE(request) {
   try {
     const authResult = verifyToken(request);
     if (authResult.error) {
-      return withCORSHeaders(createErrorResponse(authResult.error, authREsult.status));
+      return withCORSHeaders(createErrorResponse(authResult.error, authResult.status));
     }
 
-    const { sellerId } = authResult;
-    const pathSegments = url.pathname.split('/');
-    const packageId = pathSegments[pathSegments.length - 1];
+    const { searchParams } = new URL(request.url);
+    const packageId = searchParams.get('id');
 
-    if(!packageId) {
+    if (!packageId) {
       return withCORSHeaders(createErrorResponse('Package ID required', 400));
     }
 
+    const { sellerId } = authResult;
     const sellerRef = db.collection('sellers').doc(sellerId);
     const sellerDoc = await sellerRef.get();
 
