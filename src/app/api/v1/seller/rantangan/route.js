@@ -34,6 +34,48 @@ export async function GET(request) {
   }
 }
 
+export async function POST(request) {
+  try {
+    const authResult = verifyToken(request);
+    if (authResult.error) {
+      return withCORSHeaders(createErrorResponse(authResult.error, authResult.status));
+    }
+
+    const { sellerId } = authResult;
+    const body = await request.json();
+    const { name, description, price } = body;
+
+    if (!name || !description || price === undefined) {
+      return withCORSHeaders(createErrorResponse('Missing required fields', 400));
+    }
+
+    const sellerRef = db.collection('sellers').doc(sellerId);
+    const sellerDoc = await sellerRef.get();
+
+    if (!sellerDoc.exists) {
+      return withCORSHeaders(createErrorResponse('Seller not found', 404));
+    }
+
+    const  newPackage = {
+      id: `pkg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      description,
+      price: parseFloat(price),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const sellerData = sellerDoc.data();
+    const packages = sellerData.rantanganPackages || [];
+    packages.push(newPackage);
+
+    await sellerRef.update({ rantanganPackages: packages});
+    return withCORSHeaders(createSuccessResponse({ data: newPackage }, 'Package added successfully'));
+  } catch (error) {
+    return withCORSHeaders(createErrorResponse(error.message || 'Internal server error'));
+  }
+}
+
 // PUT: Update Rantangan packages (batch update)
 export async function PUT(request) {
   try {
@@ -80,6 +122,38 @@ export async function PUT(request) {
     await sellerRef.update({ rantanganPackages: updatedPackages });
 
     return withCORSHeaders(createSuccessResponse({ data: updatedPackages }, 'Rantangan packages updated successfully'));
+  } catch (error) {
+    return withCORSHeaders(createErrorResponse(error.message || 'Internal server error'));
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const authResult = verifyToken(request);
+    if (authResult.error) {
+      return withCORSHeaders(createErrorResponse(authResult.error, authREsult.status));
+    }
+
+    const { sellerId } = authResult;
+    const { searchParams} = new URL(request.url);
+    const packageId = searchParams.get('id');
+
+    if(!packageId) {
+      return withCORSHeaders(createErrorResponse('Package ID required', 400));
+    }
+
+    const sellerRef = db.collection('sellers').doc(sellerId);
+    const sellerDoc = await sellerRef.get();
+
+    if (!sellerDoc.exists) {
+      return withCORSHeaders(createErrorResponse('Seller not found', 404));
+    }
+
+    const sellerData = sellerDoc.data();
+    const packages = (sellerData.rantanganPackages || []).filter(pkg => pkg.id !== packageId);
+
+    await sellerRef.update({ rantanganPackages: packages });
+    return withCORSHeaders(createSuccessResponse({}, 'Package deleted successfully'));
   } catch (error) {
     return withCORSHeaders(createErrorResponse(error.message || 'Internal server error'));
   }
