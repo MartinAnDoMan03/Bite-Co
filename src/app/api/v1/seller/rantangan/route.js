@@ -25,7 +25,13 @@ export async function GET(request) {
     }
 
     const sellerData = sellerDoc.data();
-    const rantanganPackages = sellerData.rantanganPackages || getDefaultRantanganPackages();
+    let rantanganPackages = sellerData.rantanganPackages || getDefaultRantanganPackages();
+
+    // Id field requirement
+    rantanganPackages = rantanganPackages.map(pkg => ({
+      ...pkg,
+      id: pkg.id || pkg.type || `pkg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    }));
 
     return withCORSHeaders(createSuccessResponse({ data: rantanganPackages }));
 
