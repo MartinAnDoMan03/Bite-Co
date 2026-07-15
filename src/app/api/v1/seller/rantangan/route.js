@@ -135,8 +135,8 @@ export async function DELETE(request) {
     }
 
     const { sellerId } = authResult;
-    const { searchParams} = new URL(request.url);
-    const packageId = searchParams.get('id');
+    const pathSegments = url.pathname.split('/');
+    const packageId = pathSegments[pathSegments.length - 1];
 
     if(!packageId) {
       return withCORSHeaders(createErrorResponse('Package ID required', 400));
