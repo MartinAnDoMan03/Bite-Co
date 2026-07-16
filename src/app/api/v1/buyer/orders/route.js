@@ -3,6 +3,8 @@ import { verifyBuyerToken } from '@/middleware/buyerAuth';
 import { db } from '@/firebase/configure';
 import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
+import { sendNotification } from '@/lib/notificationSender';
+
 
 export async function OPTIONS() {
   return handleOptions();
@@ -286,10 +288,22 @@ export async function POST(request) {
         statusProgress: 'awaiting_seller_approval',
         paymentStatus: orderData.orderType === 'Bite Eco' || orderData.totalAmount === 0 ? 'not_required' : 'pending'
       }
-    }, 'Order created successfully'));
+    }, 'Order created successfully'))
 
   } catch (error) {
     console.error('Error creating order:', error);
     return wrapCORS(createErrorResponse(error.message || 'Internal server error'));
   }
 }
+
+    const sellerDoc = await db.collection('sellers').doc(sellerId).get();
+    const sellerData = sellerDoc.data();
+    
+    if (sellerData.expoPushToken) {
+      await sendNotification(
+        sellerData.expoPushToken,
+        'Pesanan Baru!',
+        `Pesanan dari ${buyerName} telah diterima`,
+        { orderId, buyerId }
+      );
+    }

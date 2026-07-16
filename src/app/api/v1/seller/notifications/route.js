@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/firebase/configure';
-import { verifyToken } from '@/lib/auth';
+import { createSuccessResponse, verifyToken } from '@/lib/auth';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 
 export async function OPTIONS() {
@@ -50,6 +50,24 @@ export async function GET(request) {
       error: 'Internal server error',
       debug: error.message 
     }, { status: 500 }));
+  }
+}
+
+export async function POST(request) {
+  if (request.url.includes('register-push-token')) {
+    try {
+      const { pushToken, userId } = await request.json();
+      const userType = request.url.includes('seller') ? 'seller' : 'buyer';
+
+      const userRef = db.collection(userType + 's').doc(userId);
+      await userRef.update({ expoPushToken: pushToken });
+
+      return withCORSHeaders(createSuccessResponse({
+        message: 'Push token registered'
+      }));
+    } catch (error) {
+      return withCORSHeaders(createErrorResponse(error.message));
+    }
   }
 }
 
