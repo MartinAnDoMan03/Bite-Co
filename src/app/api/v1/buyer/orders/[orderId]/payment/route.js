@@ -111,8 +111,8 @@ export async function POST(request, { params }) {
       // Prepare items detail
       const itemDetails = orderData.items?.map((item, index) => ({
         id: `item_${index + 1}`,
-        price: Math.round((item.price || 0) * (item.quantity || 1)),
-        quantity: item.quantity || 1,
+        price: Math.round(item.price || 0),
+        quantity: item.qty || item.quantity || 1,
         name: item.menuName || item.name || `Item ${index + 1}`,
       })) || [{
         id: 'default_item',
