@@ -115,7 +115,7 @@ export async function POST(request) {
         isProduction = true;
         serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY;
       }
-
+      console.log('[APPROVE] serverKey yang beneran dipakai:', serverKey); 
       const snap = new midtransClient.Snap({
         isProduction,
         serverKey,
