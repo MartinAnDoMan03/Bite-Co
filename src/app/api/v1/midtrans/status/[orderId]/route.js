@@ -40,28 +40,12 @@ export async function GET(request, { params }) {
         'Content-Type': 'application/json',
       },
     });
-    // TAMBAHAN DEBUG SEMENTARA — hapus _debug_* setelah masalah ketemu
     return withCORSHeaders(
-      NextResponse.json({
-        ...res.data,
-        _debug_serverKeyPrefix: serverKey.substring(0, 20),
-        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',
-      })
+      NextResponse.json(res.data)
     );
   } catch (error) {
-    // TAMBAHAN DEBUG SEMENTARA — hapus _debug_* setelah masalah ketemu
-    const debugServerKey = process.env.MIDTRANS_MODE === 'production'
-      ? process.env.MIDTRANS_PRODUCTION_SERVER_KEY
-      : process.env.MIDTRANS_SANDBOX_SERVER_KEY;
-
     return withCORSHeaders(
-      NextResponse.json({
-        error: 'Failed to fetch Midtrans status',
-        debug: error.message,
-        _debug_serverKeyPrefix: debugServerKey ? debugServerKey.substring(0, 20) : 'MISSING',
-        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',
-        _debug_responseFromMidtrans: error.response?.data || null,
-      }, { status: 200 }) // sementara 200 biar gampang dibuka langsung di browser
+      NextResponse.json({ error: 'Failed to fetch Midtrans status', debug: error.message }, { status: 500 })
     );
   }
 }
