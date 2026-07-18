@@ -17,7 +17,6 @@ export async function GET(request, { params }) {
         NextResponse.json({ error: 'Missing orderId in URL' }, { status: 400 })
       );
     }
-    // Midtrans API credentials
     let serverKey;
     let midtransUrl;
     if (process.env.MIDTRANS_MODE === 'production') {
@@ -41,11 +40,20 @@ export async function GET(request, { params }) {
       },
     });
     return withCORSHeaders(
-      NextResponse.json(res.data)
+      NextResponse.json({
+        ...res.data,
+        _debug_serverKeyPrefix: serverKey.substring(0, 20),  // TAMBAH INI SEMENTARA
+        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',  // TAMBAH INI
+      })
     );
   } catch (error) {
     return withCORSHeaders(
-      NextResponse.json({ error: 'Failed to fetch Midtrans status', debug: error.message }, { status: 500 })
+      NextResponse.json({
+        error: 'Failed to fetch Midtrans status',
+        debug: error.message,
+        _debug_serverKeyPrefix: process.env.MIDTRANS_SANDBOX_SERVER_KEY?.substring(0, 20) || 'MISSING',  // TAMBAH INI
+        _debug_responseFromMidtrans: error.response?.data || null,  // TAMBAH INI
+      }, { status: 500 })
     );
   }
 }
