@@ -17,6 +17,7 @@ export async function GET(request, { params }) {
         NextResponse.json({ error: 'Missing orderId in URL' }, { status: 400 })
       );
     }
+    // Midtrans API credentials
     let serverKey;
     let midtransUrl;
     if (process.env.MIDTRANS_MODE === 'production') {
@@ -39,21 +40,28 @@ export async function GET(request, { params }) {
         'Content-Type': 'application/json',
       },
     });
+    // TAMBAHAN DEBUG SEMENTARA — hapus _debug_* setelah masalah ketemu
     return withCORSHeaders(
       NextResponse.json({
         ...res.data,
-        _debug_serverKeyPrefix: serverKey.substring(0, 20),  // TAMBAH INI SEMENTARA
-        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',  // TAMBAH INI
+        _debug_serverKeyPrefix: serverKey.substring(0, 20),
+        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',
       })
     );
   } catch (error) {
+    // TAMBAHAN DEBUG SEMENTARA — hapus _debug_* setelah masalah ketemu
+    const debugServerKey = process.env.MIDTRANS_MODE === 'production'
+      ? process.env.MIDTRANS_PRODUCTION_SERVER_KEY
+      : process.env.MIDTRANS_SANDBOX_SERVER_KEY;
+
     return withCORSHeaders(
       NextResponse.json({
         error: 'Failed to fetch Midtrans status',
         debug: error.message,
-        _debug_serverKeyPrefix: process.env.MIDTRANS_SANDBOX_SERVER_KEY?.substring(0, 20) || 'MISSING',  // TAMBAH INI
-        _debug_responseFromMidtrans: error.response?.data || null,  // TAMBAH INI
-      }, { status: 500 })
+        _debug_serverKeyPrefix: debugServerKey ? debugServerKey.substring(0, 20) : 'MISSING',
+        _debug_mode: process.env.MIDTRANS_MODE || 'not set (default sandbox)',
+        _debug_responseFromMidtrans: error.response?.data || null,
+      }, { status: 200 }) // sementara 200 biar gampang dibuka langsung di browser
     );
   }
 }
