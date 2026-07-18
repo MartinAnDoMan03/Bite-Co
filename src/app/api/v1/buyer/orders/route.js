@@ -277,6 +277,21 @@ export async function POST(request) {
       });
     }
 
+    // Kirim notifikasi ke seller kalau ada order baru masuk
+    if (sellerData?.expoPushToken) {
+      try {
+        await sendNotification(
+          sellerData.expoPushToken,
+          'Pesanan Baru!',
+          `Pesanan dari ${fullBuyerData.name || 'Buyer'} telah diterima`,
+          { orderId: orderRef.id, buyerId }
+        );
+      } catch (notifError) {
+        console.error('Error sending notification to seller:', notifError);
+        // Jangan gagalkan pembuatan order cuma karena notifikasi gagal
+      }
+    }
+
     return wrapCORS(createSuccessResponse({
       orderId: orderRef.id,
       message: 'Order created successfully. Waiting for seller approval.',
@@ -294,15 +309,3 @@ export async function POST(request) {
     return wrapCORS(createErrorResponse(error.message || 'Internal server error'));
   }
 }
-
-    const sellerDoc = await db.collection('sellers').doc(sellerId).get();
-    const sellerData = sellerDoc.data();
-    
-    if (sellerData.expoPushToken) {
-      await sendNotification(
-        sellerData.expoPushToken,
-        'Pesanan Baru!',
-        `Pesanan dari ${buyerName} telah diterima`,
-        { orderId, buyerId }
-      );
-    }
