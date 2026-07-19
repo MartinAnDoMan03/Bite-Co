@@ -1,26 +1,24 @@
 import { db } from '@/firebase/configure';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
-import { verifySellerToken } from '@/middleware/sellerAuth';
+import { verifyToken } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 
 export async function OPTIONS() {
     return handleOptions();
 }
 
-// PUT: Update spesifik paket di dalam array
 export async function PUT(request, { params }) {
     try {
         const { id } = params;
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return withCORSHeaders(NextResponse.json({ error: "Authorization header required" }, { status: 401 }));
+        const authResult = verifyToken(request);
+        if (authResult.error) {
+            return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: authResult.status || 401 }));
         }
 
-        const token = authHeader.substring(7);
-        let sellerData = verifySellerToken(token);
+        const sellerId = authResult.sellerId || authResult.id;
         const body = await request.json();
 
-        const sellerRef = db.collection('sellers').doc(sellerData.id);
+        const sellerRef = db.collection('sellers').doc(sellerId);
         const sellerDoc = await sellerRef.get();
 
         if (!sellerDoc.exists) {
@@ -34,7 +32,6 @@ export async function PUT(request, { params }) {
             return withCORSHeaders(NextResponse.json({ error: "Package not found" }, { status: 404 }));
         }
 
-        // Timpa data lama dengan data baru
         packages[packageIndex] = {
             ...packages[packageIndex],
             name: body.name,
@@ -47,7 +44,6 @@ export async function PUT(request, { params }) {
         };
 
         await sellerRef.update({ cateringPackages: packages });
-
         return withCORSHeaders(NextResponse.json({ message: "Package updated successfully" }));
 
     } catch (error) {
@@ -56,19 +52,17 @@ export async function PUT(request, { params }) {
     }
 }
 
-// DELETE: Hapus spesifik paket dari array
 export async function DELETE(request, { params }) {
     try {
         const { id } = params;
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return withCORSHeaders(NextResponse.json({ error: "Authorization header required" }, { status: 401 }));
+        const authResult = verifyToken(request);
+        if (authResult.error) {
+            return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: authResult.status || 401 }));
         }
 
-        const token = authHeader.substring(7);
-        let sellerData = verifySellerToken(token);
+        const sellerId = authResult.sellerId || authResult.id;
 
-        const sellerRef = db.collection('sellers').doc(sellerData.id);
+        const sellerRef = db.collection('sellers').doc(sellerId);
         const sellerDoc = await sellerRef.get();
 
         if (!sellerDoc.exists) {
@@ -76,8 +70,6 @@ export async function DELETE(request, { params }) {
         }
 
         let packages = sellerDoc.data().cateringPackages || [];
-        
-        // Filter out paket yang mau dihapus
         const updatedPackages = packages.filter(pkg => pkg.id !== id);
 
         if (packages.length === updatedPackages.length) {
@@ -85,7 +77,6 @@ export async function DELETE(request, { params }) {
         }
 
         await sellerRef.update({ cateringPackages: updatedPackages });
-
         return withCORSHeaders(NextResponse.json({ message: "Package deleted successfully" }));
 
     } catch (error) {
