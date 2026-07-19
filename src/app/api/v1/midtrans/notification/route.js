@@ -10,7 +10,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
     console.log('[MIDTRANS][NOTIF] Incoming payload:', JSON.stringify(body));
-    let { order_id, transaction_status, fraud_status, payment_type } = body;
+    let { order_id, transaction_status, fraud_status, payment_type, signature_key, gross_amount, status_code } = body;
 
     // Handle test payloads: strip test prefix if present
     if (order_id && order_id.startsWith('payment_notif_test_')) {
@@ -25,7 +25,21 @@ export async function POST(req) {
       console.log('[MIDTRANS][NOTIF] Stripped test order_id:', order_id);
     }
 
-    // Optionally, verify signature key here for extra security
+    // Verify Midtrans Signature
+    const crypto = require('crypto');
+    const serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY || process.env.MIDTRANS_SANDBOX_SERVER_KEY;
+    const expectedSignature = crypto
+      .createHash('sha512')
+      .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
+      .digest('hex');
+    
+    if (signature_key !== expectedSignature) {
+      console.error('[MIDTRANS][NOTIF] Invalid signature for order:', order_id);
+      return withCORSHeaders(new Response(
+        JSON.stringify({ error: 'Invalid signature' }),
+        { status: 403 }
+      ));
+    }
 
     // Update Firestore order status
     const orderRef = db.collection('orders').doc(order_id);
