@@ -160,6 +160,9 @@ export async function GET(request) {
           pinLat: userData.pinLat || null,
           pinLng: userData.pinLng || null,
           pinAddress: userData.pinAddress || null,
+          openTime: userData.openTime || null,
+          closeTime: userData.closeTime || null,
+          isManuallyClosed: userData.isManuallyClosed || false,
         })
       );
 
@@ -290,7 +293,22 @@ export async function PUT(request) {
     // 3. Parse multipart form data
     const { fields, files } = await parseMultipartForm(request);
 
-    const { name, phone, address, kelurahan, kecamatan, provinsi, kodePos, catatan, pinLat, pinLng, pinAddress } = fields;
+    const {
+      name,
+      phone,
+      address,
+      kelurahan,
+      kecamatan,
+      provinsi,
+      kodePos,
+      catatan,
+      pinLat,
+      pinLng,
+      pinAddress,
+      openTime,
+      closeTime,
+      isManuallyClosed,
+    } = fields;
 
     let storeIconURL = null;
     let storeBannerURL = null;
@@ -334,7 +352,11 @@ export async function PUT(request) {
     }
 
     // 4. Validate required fields
-    if (!name && !phone && !address && !kelurahan && !kecamatan && !provinsi && !kodePos && !catatan && !storeIconURL && !storeBannerURL) {
+    if (
+      !name && !phone && !address && !kelurahan && !kecamatan && !provinsi &&
+      !kodePos && !catatan && !storeIconURL && !storeBannerURL &&
+      !openTime && !closeTime && isManuallyClosed === undefined
+    ) {
       console.warn('No fields provided for profile update');
       return withCORSHeaders(
         NextResponse.json(
@@ -367,13 +389,25 @@ export async function PUT(request) {
       if (pinLat) updateData.pinLat = pinLat;
       if (pinLng) updateData.pinLng = pinLng;
       if (pinAddress) updateData.pinAddress = pinAddress;
+      // Jam operasional — openTime/closeTime dicek terpisah dari isManuallyClosed
+      // karena isManuallyClosed boolean (dikirim sebagai string 'true'/'false' lewat
+      // FormData), jadi nggak bisa pakai `if (isManuallyClosed)` biasa (string 'false'
+      // itu truthy, bakal ke-skip terus kalau begitu)
+      if (openTime) updateData.openTime = openTime;
+      if (closeTime) updateData.closeTime = closeTime;
+      if (isManuallyClosed !== undefined) updateData.isManuallyClosed = isManuallyClosed === 'true';
       updateData.updatedAt = new Date().toISOString();
 
       await userRef.update(updateData);
 
       // 6. Respond with success message
+      // PENTING: field `success: true` wajib ada — frontend (handleSave di
+      // Profile.jsx) ngecek `response.data.success` buat nentuin apakah lanjut
+      // keluar dari mode edit + refresh data. Tanpa field ini, response tetap
+      // 200 OK dan data tetap kesimpen ke Firestore, tapi UI seller nggak akan
+      // pernah keluar dari mode edit karena kondisinya nggak pernah true.
       console.log('Seller profile updated successfully:', decoded.sellerId);
-      return withCORSHeaders(NextResponse.json({ message: 'Profile updated successfully' }));
+      return withCORSHeaders(NextResponse.json({ success: true, message: 'Profile updated successfully' }));
 
     } catch (dbError) {
       console.error('Database update failed:', dbError);
