@@ -61,6 +61,15 @@ const navigation = [
     )
   },
   { 
+  name: 'Promos', 
+  href: '/dashboard/promos', 
+  icon: (
+    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+      <path fillRule="evenodd" d="M5 2a2 2 0 00-2 2v14l3.5-2 3.5 2 3.5-2 3.5 2V4a2 2 0 00-2-2H5zm4.707 3.707a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L8.414 10l1.293-1.293zm2.586 0l1.293 1.293L12.293 10l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414l1.293-1.293z" clipRule="evenodd"/>
+    </svg>
+  )
+  },
+  { 
     name: 'Settings', 
     href: '/dashboard/settings', 
     icon: (
