@@ -2,7 +2,6 @@ import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { createSuccessResponse, createErrorResponse } from '@/lib/auth';
 import { db } from '@/firebase/configure';
 import { verifyToken } from '@/lib/auth';
-import { useRef } from "react";
 
 export async function OPTIONS() {
   return handleOptions();
