@@ -81,6 +81,10 @@ export async function GET(req, context) {
       pinLng: data.pinLng || null,
       pinAddress: data.pinAddress || null,
       address: data.address || null,
+      // Operating hours / status fields for buyer-side open/closed logic
+      openTime: data.openTime || null,
+      closeTime: data.closeTime || null,
+      isManuallyClosed: data.isManuallyClosed || false,
     };
     console.log('Seller detail fetched:', seller);
     return withCORSHeaders(NextResponse.json({ seller }));

@@ -87,7 +87,11 @@ export async function GET(req) {
             pinLng: data.pinLng || null,
             pinAddress: data.pinAddress || null,
             distance: distance,
-            rantanganPackages: data.rantanganPackages
+            rantanganPackages: data.rantanganPackages,
+            // Operating hours / status fields for buyer-side open/closed badge
+            openTime: data.openTime || null,
+            closeTime: data.closeTime || null,
+            isManuallyClosed: data.isManuallyClosed || false,
           });
         }
       }
