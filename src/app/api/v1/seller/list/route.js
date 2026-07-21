@@ -82,6 +82,7 @@ export async function GET(req) {
         openTime: data.openTime || null,
         closeTime: data.closeTime || null,
         isManuallyClosed: data.isManuallyClosed || false,
+        productHalal: data.productHalal === true || data.productHalal === "1",
       };
     });
 
