@@ -134,7 +134,7 @@ export default function PromosPage() {
       ) : promos.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-lg font-medium">No promos yet</p>
-          <p className="text-sm mt-1">Click "Add Promo" to create your first banner</p>
+            <p className="text-sm mt-1">Click &quot;Add Promo&quot; to create your first banner</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
