@@ -1,20 +1,19 @@
 import { db, storage } from '@/firebase/configure';
 import { NextResponse } from 'next/server';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
-import { verifyToken } from '@/lib/auth';
-import { Activity } from 'react';
 
 export async function OPTIONS() {
     return handleOptions();
 }
 
-// GET: Fetch active promos (buyer home banner)
+// GET: Fetch active promos
 export async function GET(request) {
     try {
         const { searchParams } = new URL(request.url);
         const activeOnly = searchParams.get('active') !== 'false';
 
-        let query = db.collectiuon('promos').orderBy('createdAt', 'desc');
+        // PERBAIKAN TYPO DI SINI: collection (sebelumnya collectiuon)
+        let query = db.collection('promos').orderBy('createdAt', 'desc');
 
         if (activeOnly) {
             query = query.where('isActive', '==', true);
@@ -23,7 +22,6 @@ export async function GET(request) {
         const snapshot = await query.get();
         const promos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Expired promos not included
         const now = new Date();
         const validPromos = promos.filter(p => {
             if (!p.endDate) return true;
@@ -40,28 +38,55 @@ export async function GET(request) {
 // POST: Create new promo via admin only
 export async function POST(request) {
     try {
-        // Admin cookie check
         const adminCookie = request.cookies.get('auth-token');
         if(!adminCookie) {
             return withCORSHeaders(NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 }));
         }
 
-        const body = await request.json();
-        const { title, description, imageUrl, startDate, endDate, isActive, type, discountAmount, sellerId, sellerName, promoFor } = body;
+        // KITA GUNAKAN FORMDATA SEKARANG
+        const formData = await request.formData();
+        
+        const title = formData.get('title');
+        const description = formData.get('description');
+        const startDate = formData.get('startDate');
+        const endDate = formData.get('endDate');
+        const isActive = formData.get('isActive') === 'true';
+        const type = formData.get('type');
+        const discountAmount = formData.get('discountAmount');
+        const sellerId = formData.get('sellerId');
+        const sellerName = formData.get('sellerName');
+        const promoFor = formData.get('promoFor');
+        const imageFile = formData.get('image'); // Ambil file gambar
 
-        if (!title || !imageUrl) {
+        if (!title || !imageFile) {
             return withCORSHeaders(NextResponse.json({ success: false, message: 'Title and image are required' }, { status: 400 }));
         }
 
+        // PROSES UPLOAD GAMBAR KE FIREBASE STORAGE (ADMIN SDK)
+        const imageBuffer = await imageFile.arrayBuffer();
+        const fileName = `promos/${Date.now()}_${imageFile.name}`;
+        const storageRef = storage.bucket().file(fileName);
+        
+        await storageRef.save(Buffer.from(imageBuffer), {
+            metadata: { contentType: imageFile.type || 'image/jpeg' },
+        });
+        
+        const imageUrlArr = await storageRef.getSignedUrl({
+            action: 'read',
+            expires: '03-09-2491'
+        });
+        const imageUrl = imageUrlArr[0];
+
+        // SIMPAN KE FIRESTORE
         const newPromo = {
             title,
             description: description || '',
-            imageUrl,
+            imageUrl: imageUrl,
             startDate: startDate || new Date().toISOString(),
             endDate: endDate || null,
-            isActive: isActive !== false,
-            type: type || 'info', // 'discount', | 'info' | 'event'
-            discountAmount: discountAmount || null,
+            isActive: isActive,
+            type: type || 'info',
+            discountAmount: discountAmount ? Number(discountAmount) : null,
             sellerId: sellerId || null,
             sellerName: sellerName || null,
             promoFor: promoFor || 'both',

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { db, storage } from '../../../lib/firebase'
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { collection, onSnapshot, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore'
+// Kita tidak pakai addDoc & uploadBytes lagi di sini karena sudah dipindah ke API Route Backend
 
 export default function PromosPage() {
   const [promos, setPromos] = useState([])
@@ -11,6 +11,7 @@ export default function PromosPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPromo, setEditingPromo] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [imageFile, setImageFile] = useState(null) // Tambahan state untuk menyimpan file gambar fisik
   
   const [form, setForm] = useState({
     title: '',
@@ -29,6 +30,7 @@ export default function PromosPage() {
   // Standarisasi style untuk input
   const inputStyle = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#711330]/30 bg-white";
 
+  // Ambil data promo dari Firestore (Realtime)
   useEffect(() => {
     const q = query(collection(db, 'promos'), orderBy('createdAt', 'desc'))
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -41,6 +43,7 @@ export default function PromosPage() {
 
   const resetForm = () => {
     setForm({ title: '', description: '', imageUrl: '', startDate: '', endDate: '', isActive: true, type: 'info', discountAmount: '', sellerId: '', sellerName: '', promoFor: 'both' })
+    setImageFile(null) // Pastikan file gambar juga direset
     setEditingPromo(null)
   }
 
@@ -64,70 +67,91 @@ export default function PromosPage() {
     setModalOpen(true)
   }
 
-  const handleImageUpload = async (e) => {
+  // LOGIKA GAMBAR BARU: Hanya tampilkan preview, uploadnya nanti pas klik simpan
+  const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (!file) return
 
-    // Batasi ukuran file untuk mencegah loading lama
+    // Batasi ukuran file untuk mencegah loading lama (Maksimal 2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert("Ukuran gambar terlalu besar! Maksimal 2MB.");
       e.target.value = ''; // Reset input
       return;
     }
 
+    setImageFile(file) // Simpan file fisiknya untuk dikirim ke API
+
+    // Tampilkan preview instan
+    const localPreviewUrl = URL.createObjectURL(file)
+    setForm(f => ({ ...f, imageUrl: localPreviewUrl }))
+  } // <--- Tadi kurung kurawal ini hilang!
+
+  // LOGIKA SIMPAN BARU: Kirim FormData ke API Route
+  const handleSave = async () => {
+    // Validasi: Wajib ada Judul dan (Gambar lama ATAU File gambar baru)
+    if (!form.title || (!form.imageUrl && !imageFile)) {
+      alert('Judul dan gambar banner wajib diisi!')
+      return
+    }
+
     setUploading(true)
+
     try {
-      const storageRef = ref(storage, `promos/${Date.now()}_${file.name}`)
-      await uploadBytes(storageRef, file)
-      const url = await getDownloadURL(storageRef)
-      setForm(f => ({ ...f, imageUrl: url }))
+      if (editingPromo) {
+        alert("Fitur edit menggunakan API sedang disesuaikan.");
+        setUploading(false);
+        return;
+      }
+
+      // Memasukkan data ke FormData dengan benar
+      const formData = new FormData();
+      formData.append('title', form.title);
+      formData.append('description', form.description);
+      formData.append('type', form.type);
+      formData.append('isActive', form.isActive);
+      formData.append('promoFor', form.promoFor);
+      
+      if (form.startDate) formData.append('startDate', new Date(form.startDate).toISOString());
+      if (form.endDate) formData.append('endDate', new Date(form.endDate).toISOString());
+      
+      if (form.type === 'discount' && form.discountAmount) {
+        formData.append('discountAmount', form.discountAmount);
+      }
+      
+      if (form.sellerId) formData.append('sellerId', form.sellerId);
+      if (form.sellerName) formData.append('sellerName', form.sellerName);
+      
+      if (imageFile) {
+        formData.append('image', imageFile);
+      }
+
+      // Tembak ke API Route Backend kamu
+      const response = await fetch('/api/v1/promos', {
+        method: 'POST',
+        body: formData, // Otomatis mengirim file dan data teks
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setModalOpen(false)
+        resetForm()
+      } else {
+        alert("Gagal menyimpan: " + data.message);
+      }
     } catch (err) {
-      alert('Upload failed: ' + err.message)
+      alert('Terjadi kesalahan saat menyimpan promo: ' + err.message)
     } finally {
       setUploading(false)
     }
   }
 
-  const handleSave = async () => {
-    if (!form.title || !form.imageUrl) {
-      alert('Title and banner image are required')
-      return
-    }
-    const data = {
-      title: form.title,
-      description: form.description,
-      imageUrl: form.imageUrl,
-      startDate: form.startDate ? new Date(form.startDate).toISOString() : new Date().toISOString(),
-      endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
-      isActive: form.isActive,
-      type: form.type,
-      // Pastikan discount hanya tersimpan jika tipenya discount
-      discountAmount: form.type === 'discount' && form.discountAmount ? Number(form.discountAmount) : null,
-      updatedAt: new Date().toISOString(),
-      sellerId: form.sellerId || null,
-      sellerName: form.sellerName || null,
-      promoFor: form.promoFor || null,
-    }
-    
-    try {
-      if (editingPromo) {
-        await updateDoc(doc(db, 'promos', editingPromo.id), data)
-      } else {
-        await addDoc(collection(db, 'promos'), { ...data, createdAt: new Date().toISOString() })
-      }
-      setModalOpen(false)
-      resetForm()
-    } catch (err) {
-      alert('Error saving promo: ' + err.message)
-    }
-  }
-
   const handleDelete = async (id) => {
-    if (!confirm('Delete this promo?')) return
+    if (!confirm('Hapus promo ini?')) return
     try {
       await deleteDoc(doc(db, 'promos', id))
     } catch (err) {
-      alert('Error deleting: ' + err.message)
+      alert('Gagal menghapus: ' + err.message)
     }
   }
 
@@ -137,29 +161,29 @@ export default function PromosPage() {
 
   return (
     <div>
-      {/* Header Halaman (Tetap sama) */}
+      {/* Header Halaman */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Promos & Banners</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage promotional banners shown on the buyer home screen</p>
+          <p className="text-slate-500 text-sm mt-1">Kelola banner promo yang tampil di beranda pembeli</p>
         </div>
         <button
           onClick={openCreate}
           className="bg-[#711330] text-white px-4 py-2 rounded-xl font-medium hover:bg-[#8a1a3c] transition-colors"
         >
-          + Add Promo
+          + Buat Promo
         </button>
       </div>
 
-      {/* List Promo (Tetap sama) */}
+      {/* List Promo */}
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#711330]" />
         </div>
       ) : promos.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
-          <p className="text-lg font-medium">No promos yet</p>
-            <p className="text-sm mt-1">Click &quot;Add Promo&quot; to create your first banner</p>
+          <p className="text-lg font-medium">Belum ada promo</p>
+          <p className="text-sm mt-1">Klik "+ Buat Promo" untuk mulai membuat banner.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -169,11 +193,11 @@ export default function PromosPage() {
                 {promo.imageUrl ? (
                   <img src={promo.imageUrl} alt={promo.title} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-400">No image</div>
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">Tanpa Gambar</div>
                 )}
                 <div className="absolute top-2 right-2 flex gap-2">
                   <span className={`px-2 py-1 rounded-lg text-xs font-semibold shadow-sm ${promo.isActive ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {promo.isActive ? 'Active' : 'Inactive'}
+                    {promo.isActive ? 'Aktif' : 'Nonaktif'}
                   </span>
                   <span className="px-2 py-1 rounded-lg text-xs font-semibold bg-[#711330]/90 text-white shadow-sm capitalize">
                     {promo.type}
@@ -183,7 +207,6 @@ export default function PromosPage() {
               <div className="p-4 flex flex-col flex-grow">
                 <h3 className="font-bold text-slate-900 truncate">{promo.title}</h3>
                 
-                {/* Info Toko jika ada */}
                 {promo.sellerName && (
                    <p className="text-xs font-medium text-slate-500 mt-1">
                      Target: <span className="text-[#711330]">{promo.sellerName}</span> ({promo.promoFor})
@@ -204,7 +227,7 @@ export default function PromosPage() {
                     onClick={() => handleToggleActive(promo)}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${promo.isActive ? 'border-slate-300 text-slate-600 hover:bg-slate-50' : 'border-green-300 text-green-600 hover:bg-green-50'}`}
                   >
-                    {promo.isActive ? 'Deactivate' : 'Activate'}
+                    {promo.isActive ? 'Matikan' : 'Aktifkan'}
                   </button>
                   <button
                     onClick={() => openEdit(promo)}
@@ -216,7 +239,7 @@ export default function PromosPage() {
                     onClick={() => handleDelete(promo.id)}
                     className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-300 text-red-500 hover:bg-red-50 transition-colors"
                   >
-                    Delete
+                    Hapus
                   </button>
                 </div>
               </div>
@@ -260,7 +283,6 @@ export default function PromosPage() {
                     />
                   </div>
                   
-                  {/* Grid untuk Tipe Promo & Diskon (Kondisional) */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-sm font-medium text-slate-700 block mb-1">Tipe Promo</label>
@@ -272,7 +294,6 @@ export default function PromosPage() {
                           setForm(f => ({
                             ...f, 
                             type: newType,
-                            // Reset discount amount jika tipe bukan discount
                             discountAmount: newType === 'discount' ? f.discountAmount : ''
                           }))
                         }}
@@ -283,7 +304,6 @@ export default function PromosPage() {
                       </select>
                     </div>
                     
-                    {/* HANYA MUNCUL JIKA TIPE = DISCOUNT */}
                     {form.type === 'discount' && (
                       <div>
                         <label className="text-sm font-medium text-slate-700 block mb-1">Nominal Diskon (Rp)</label>
@@ -310,13 +330,6 @@ export default function PromosPage() {
                   className="text-sm text-slate-600 w-full file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#711330]/10 file:text-[#711330] hover:file:bg-[#711330]/20 cursor-pointer" 
                 />
                 <p className="text-xs text-slate-400 mt-1">Maksimal 2MB. Resolusi disarankan 16:9.</p>
-                
-                {uploading && (
-                  <div className="mt-3 flex items-center gap-2 text-sm text-[#711330] font-medium">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#711330]"></div>
-                    Mengunggah gambar...
-                  </div>
-                )}
                 
                 {form.imageUrl && !uploading && (
                   <img src={form.imageUrl} alt="preview" className="mt-4 h-32 w-auto object-cover rounded-xl border border-slate-200 shadow-sm" />
@@ -390,7 +403,7 @@ export default function PromosPage() {
                       className="w-5 h-5 accent-[#711330] rounded cursor-pointer"
                     />
                     <label htmlFor="isActive" className="text-sm font-bold text-slate-700 cursor-pointer">
-                      Aktifkan Promo Ini Sekarang
+                      Aktifkan Promo
                     </label>
                   </div>
                 </div>
@@ -403,6 +416,7 @@ export default function PromosPage() {
               <button
                 onClick={() => { setModalOpen(false); resetForm() }}
                 className="px-6 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                disabled={uploading}
               >
                 Batal
               </button>
@@ -411,7 +425,14 @@ export default function PromosPage() {
                 disabled={uploading}
                 className="px-6 py-2.5 rounded-xl bg-[#711330] text-white font-semibold hover:bg-[#8a1a3c] transition-colors disabled:opacity-50 flex items-center gap-2"
               >
-                {editingPromo ? 'Simpan Perubahan' : 'Buat Promo'}
+                {uploading ? (
+                  <>
+                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                   Menyimpan...
+                  </>
+                ) : (
+                  editingPromo ? 'Simpan Perubahan' : 'Buat Promo'
+                )}
               </button>
             </div>
           </div>
