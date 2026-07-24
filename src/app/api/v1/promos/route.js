@@ -1,6 +1,7 @@
 import { db, storage } from '@/firebase/configure';
 import { NextResponse } from 'next/server';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
+import { verifyAdmin } from '@/lib/admin-auth';
 
 export async function OPTIONS() {
     return handleOptions();
@@ -38,10 +39,7 @@ export async function GET(request) {
 // POST: Create new promo via admin only
 export async function POST(request) {
     try {
-        const adminCookie = request.cookies.get('auth-token');
-        if(!adminCookie) {
-            return withCORSHeaders(NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 }));
-        }
+        verifyAdmin(request);
 
         // KITA GUNAKAN FORMDATA SEKARANG
         const formData = await request.formData();

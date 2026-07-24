@@ -24,12 +24,24 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const result = await adminLogin(credentials.username, credentials.password)
+      const response = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username: credentials.username,
+        password: credentials.password
+      })
+    })
+
+    const result = await response.json()
       
       if (result.success) {
-        // Store authentication state in localStorage
+        // Save the logged-in admin so the dashboard's auth check (which reads
+        // this localStorage key, not the cookie) recognizes the session.
         localStorage.setItem('bite-admin-user', JSON.stringify(result.user))
-        
+
         // Redirect to dashboard
         router.push('/dashboard')
       } else {
