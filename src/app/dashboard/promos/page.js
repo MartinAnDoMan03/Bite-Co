@@ -183,7 +183,7 @@ export default function PromosPage() {
       ) : promos.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
           <p className="text-lg font-medium">Belum ada promo</p>
-          <p className="text-sm mt-1">Klik "+ Buat Promo" untuk mulai membuat banner.</p>
+          <p className="text-sm mt-1">Klik &quot;+ Buat Promo&quot; untuk mulai membuat banner.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
