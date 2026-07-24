@@ -47,7 +47,7 @@ export async function POST(request) {
         }
 
         const body = await request.json();
-        const { title, description, imageUrl, startDate, endDate, isActive, type, discountAmount } = body;
+        const { title, description, imageUrl, startDate, endDate, isActive, type, discountAmount, sellerId, sellerName, promoFor } = body;
 
         if (!title || !imageUrl) {
             return withCORSHeaders(NextResponse.json({ success: false, message: 'Title and image are required' }, { status: 400 }));
@@ -62,6 +62,9 @@ export async function POST(request) {
             isActive: isActive !== false,
             type: type || 'info', // 'discount', | 'info' | 'event'
             discountAmount: discountAmount || null,
+            sellerId: sellerId || null,
+            sellerName: sellerName || null,
+            promoFor: promoFor || 'both',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };

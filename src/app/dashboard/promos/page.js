@@ -20,6 +20,9 @@ export default function PromosPage() {
     isActive: true,
     type: 'info',
     discountAmount: '',
+    sellerId: '',
+    sellerName: '',
+    promoFor: 'catering',
   })
 
   useEffect(() => {
@@ -50,6 +53,9 @@ export default function PromosPage() {
       isActive: promo.isActive !== false,
       type: promo.type || 'info',
       discountAmount: promo.discountAmount || '',
+      sellerId: '',
+      sellerName: '',
+      promoFor: 'both',
     })
     setModalOpen(true)
   }
@@ -85,6 +91,9 @@ export default function PromosPage() {
       type: form.type,
       discountAmount: form.discountAmount ? Number(form.discountAmount) : null,
       updatedAt: new Date().toISOString(),
+      sellerId: form.sellerId || null,
+      sellerName: form.sellerName || null,
+      promoFor: form.promoFor || null,
     }
     try {
       if (editingPromo) {
@@ -269,6 +278,36 @@ export default function PromosPage() {
                   />
                 </div>
               </div>
+              <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Seller ID</label>
+              <input
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#711330]/30"
+                value={form.sellerId}
+                onChange={e => setForm(f => ({ ...f, sellerId: e.target.value }))}
+                placeholder="Paste seller ID from Firebase"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Seller Name</label>
+              <input
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#711330]/30"
+                value={form.sellerName}
+                onChange={e => setForm(f => ({ ...f, sellerName: e.target.value }))}
+                placeholder="e.g. Vitmenu"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 block mb-1">Promo For</label>
+              <select
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#711330]/30"
+                value={form.promoFor}
+                onChange={e => setForm(f => ({ ...f, promoFor: e.target.value }))}
+              >
+                <option value="catering">Catering</option>
+                <option value="rantangan">Rantangan</option>
+                <option value="both">Keduanya (Catering & Rantangan)</option>
+              </select>
+            </div>
               <div className="flex items-center gap-3">
                 <input
                   type="checkbox"
