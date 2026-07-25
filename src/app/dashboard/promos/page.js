@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { db, storage } from '../../../lib/firebase'
-import { collection, onSnapshot, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore'
-// Kita tidak pakai addDoc & uploadBytes lagi di sini karena sudah dipindah ke API Route Backend
+// Tambahkan getDocs di import Firestore
+import { collection, onSnapshot, updateDoc, deleteDoc, doc, query, orderBy, getDocs } from 'firebase/firestore'
 
 export default function PromosPage() {
   const [promos, setPromos] = useState([])
+  const [sellers, setSellers] = useState([]) // State baru untuk menyimpan daftar seller
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPromo, setEditingPromo] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const [imageFile, setImageFile] = useState(null) // Tambahan state untuk menyimpan file gambar fisik
+  const [imageFile, setImageFile] = useState(null) 
   
   const [form, setForm] = useState({
     title: '',
@@ -22,28 +23,46 @@ export default function PromosPage() {
     isActive: true,
     type: 'info',
     discountAmount: '',
+    discountType: 'fixed',
     sellerId: '',
     sellerName: '',
     promoFor: 'both',
   })
 
-  // Standarisasi style untuk input
   const inputStyle = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#711330]/30 bg-white";
 
-  // Ambil data promo dari Firestore (Realtime)
+  // Ambil data promo (Realtime) & Ambil data seller (Sekali muat)
   useEffect(() => {
+    // 1. Fetch Promos
     const q = query(collection(db, 'promos'), orderBy('createdAt', 'desc'))
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
       setPromos(data)
       setLoading(false)
     })
+
+    // 2. Fetch Sellers untuk Dropdown
+    const fetchSellers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'sellers'));
+        const sellersList = snapshot.docs.map(d => ({
+          id: d.id, // Ambil ID dari dokumen
+          outletName: d.data().outletName || 'Toko Tanpa Nama'
+        }));
+        setSellers(sellersList);
+      } catch (err) {
+        console.error("Gagal mengambil data seller", err);
+      }
+    };
+    
+    fetchSellers();
+
     return () => unsubscribe()
   }, [])
 
   const resetForm = () => {
-    setForm({ title: '', description: '', imageUrl: '', startDate: '', endDate: '', isActive: true, type: 'info', discountAmount: '', sellerId: '', sellerName: '', promoFor: 'both' })
-    setImageFile(null) // Pastikan file gambar juga direset
+    setForm({ title: '', description: '', imageUrl: '', startDate: '', endDate: '', isActive: true, type: 'info', discountAmount: '', discountType: 'fixed', sellerId: '', sellerName: '', promoFor: 'both' })
+    setImageFile(null)
     setEditingPromo(null)
   }
 
@@ -60,6 +79,7 @@ export default function PromosPage() {
       isActive: promo.isActive !== false,
       type: promo.type || 'info',
       discountAmount: promo.discountAmount || '',
+      discountType: promo.discountType || 'fixed',
       sellerId: promo.sellerId || '',
       sellerName: promo.sellerName || '',
       promoFor: promo.promoFor || 'both',
@@ -67,28 +87,22 @@ export default function PromosPage() {
     setModalOpen(true)
   }
 
-  // LOGIKA GAMBAR BARU: Hanya tampilkan preview, uploadnya nanti pas klik simpan
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
     if (!file) return
 
-    // Batasi ukuran file untuk mencegah loading lama (Maksimal 2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert("Ukuran gambar terlalu besar! Maksimal 2MB.");
-      e.target.value = ''; // Reset input
+      e.target.value = ''; 
       return;
     }
 
-    setImageFile(file) // Simpan file fisiknya untuk dikirim ke API
-
-    // Tampilkan preview instan
+    setImageFile(file) 
     const localPreviewUrl = URL.createObjectURL(file)
     setForm(f => ({ ...f, imageUrl: localPreviewUrl }))
-  } // <--- Tadi kurung kurawal ini hilang!
+  } 
 
-  // LOGIKA SIMPAN BARU: Kirim FormData ke API Route
   const handleSave = async () => {
-    // Validasi: Wajib ada Judul dan (Gambar lama ATAU File gambar baru)
     if (!form.title || (!form.imageUrl && !imageFile)) {
       alert('Judul dan gambar banner wajib diisi!')
       return
@@ -103,7 +117,6 @@ export default function PromosPage() {
         return;
       }
 
-      // Memasukkan data ke FormData dengan benar
       const formData = new FormData();
       formData.append('title', form.title);
       formData.append('description', form.description);
@@ -116,6 +129,7 @@ export default function PromosPage() {
       
       if (form.type === 'discount' && form.discountAmount) {
         formData.append('discountAmount', form.discountAmount);
+        formData.append('discountType', form.discountType);
       }
       
       if (form.sellerId) formData.append('sellerId', form.sellerId);
@@ -125,10 +139,9 @@ export default function PromosPage() {
         formData.append('image', imageFile);
       }
 
-      // Tembak ke API Route Backend kamu
       const response = await fetch('/api/v1/promos', {
         method: 'POST',
-        body: formData, // Otomatis mengirim file dan data teks
+        body: formData, 
       });
 
       const data = await response.json();
@@ -161,7 +174,6 @@ export default function PromosPage() {
 
   return (
     <div>
-      {/* Header Halaman */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Promos & Banners</h1>
@@ -175,7 +187,6 @@ export default function PromosPage() {
         </button>
       </div>
 
-      {/* List Promo */}
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#711330]" />
@@ -216,7 +227,11 @@ export default function PromosPage() {
                 <p className="text-slate-600 text-sm mt-2 line-clamp-2 flex-grow">{promo.description || '-'}</p>
                 
                 {promo.type === 'discount' && promo.discountAmount && (
-                  <p className="text-[#711330] font-bold text-sm mt-2">Potongan: Rp {Number(promo.discountAmount).toLocaleString('id-ID')}</p>
+                   <p className="text-[#711330] font-bold text-sm mt-2">
+                    Potongan: {promo.discountType === 'percentage'
+                      ? `${promo.discountAmount}%`
+                      : `Rp ${Number(promo.discountAmount).toLocaleString('id-ID')}`}
+                  </p>
                 )}
                 {promo.endDate && (
                   <p className="text-slate-400 text-xs mt-2">Berakhir: {new Date(promo.endDate).toLocaleDateString('id-ID')}</p>
@@ -248,7 +263,6 @@ export default function PromosPage() {
         </div>
       )}
 
-      {/* Modal Form */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
@@ -259,7 +273,6 @@ export default function PromosPage() {
             
             <div className="p-6 overflow-y-auto flex flex-col gap-6">
               
-              {/* Bagian 1: Informasi Dasar */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-4 text-sm uppercase tracking-wider">Informasi Dasar</h3>
                 <div className="space-y-4">
@@ -305,22 +318,45 @@ export default function PromosPage() {
                     </div>
                     
                     {form.type === 'discount' && (
-                      <div>
-                        <label className="text-sm font-medium text-slate-700 block mb-1">Nominal Diskon (Rp)</label>
-                        <input
-                          type="number"
-                          className={inputStyle}
-                          value={form.discountAmount}
-                          onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
-                          placeholder="Misal: 15000"
-                        />
-                      </div>
+                      <>
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 block mb-1">Jenis Diskon</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, discountType: 'fixed' }))}
+                              className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${form.discountType === 'fixed' ? 'bg-[#711330] text-white border-[#711330]' : 'border-slate-200 text-slate-600'}`}
+                            >
+                              Nominal (Rp)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, discountType: 'percentage' }))}
+                              className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-colors ${form.discountType === 'percentage' ? 'bg-[#711330] text-white border-[#711330]' : 'border-slate-200 text-slate-600'}`}
+                            >
+                              Persentase (%)
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-slate-700 block mb-1">
+                            {form.discountType === 'percentage' ? 'Persentase Diskon (%)' : 'Nominal Diskon (Rp)'}
+                          </label>
+                          <input
+                            type="number"
+                            className={inputStyle}
+                            value={form.discountAmount}
+                            max={form.discountType === 'percentage' ? 100 : undefined}
+                            onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
+                            placeholder={form.discountType === 'percentage' ? 'Misal: 20' : 'Misal: 15000'}
+                          />
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Bagian 2: Gambar Banner */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                 <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Gambar Banner *</h3>
                 <input 
@@ -336,41 +372,53 @@ export default function PromosPage() {
                 )}
               </div>
 
-              {/* Bagian 3: Target Seller & Durasi */}
+              {/* PERUBAHAN DI BAGIAN TARGET SELLER (DROPDOWN) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
                   <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wider">Target Promo (Opsional)</h3>
+                  
+                  {/* DROPDOWN FETCH DATA SELLER */}
                   <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1">ID Seller</label>
-                    <input
+                    <label className="text-sm font-medium text-slate-700 block mb-1">Pilih Toko / Seller</label>
+                    <select
                       className={inputStyle}
                       value={form.sellerId}
-                      onChange={e => setForm(f => ({ ...f, sellerId: e.target.value }))}
-                      placeholder="ID dari Firebase"
-                    />
+                      onChange={e => {
+                        const selectedId = e.target.value;
+                        if (!selectedId) {
+                          // Jika pilih "Berlaku Global", kosongkan data seller
+                          setForm(f => ({ ...f, sellerId: '', sellerName: '' }));
+                        } else {
+                          // Temukan nama toko berdasarkan ID yang dipilih
+                          const selectedSeller = sellers.find(s => s.id === selectedId);
+                          setForm(f => ({ 
+                            ...f, 
+                            sellerId: selectedId, 
+                            sellerName: selectedSeller ? selectedSeller.outletName : '' 
+                          }));
+                        }
+                      }}
+                    >
+                      <option value="">-- Semua Toko (Global) --</option>
+                      {sellers.map(seller => (
+                        <option key={seller.id} value={seller.id}>
+                          {seller.outletName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 block mb-1">Nama Toko</label>
-                      <input
-                        className={inputStyle}
-                        value={form.sellerName}
-                        onChange={e => setForm(f => ({ ...f, sellerName: e.target.value }))}
-                        placeholder="Misal: Vitmenu"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700 block mb-1">Berlaku Untuk</label>
-                      <select
-                        className={inputStyle}
-                        value={form.promoFor}
-                        onChange={e => setForm(f => ({ ...f, promoFor: e.target.value }))}
-                      >
-                        <option value="both">Keduanya</option>
-                        <option value="catering">Catering</option>
-                        <option value="rantangan">Rantangan</option>
-                      </select>
-                    </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1">Berlaku Untuk</label>
+                    <select
+                      className={inputStyle}
+                      value={form.promoFor}
+                      onChange={e => setForm(f => ({ ...f, promoFor: e.target.value }))}
+                    >
+                      <option value="both">Keduanya (Catering & Rantangan)</option>
+                      <option value="catering">Catering Saja</option>
+                      <option value="rantangan">Rantangan Saja</option>
+                    </select>
                   </div>
                 </div>
 
@@ -411,7 +459,6 @@ export default function PromosPage() {
 
             </div>
             
-            {/* Footer Modal */}
             <div className="p-5 border-t border-slate-200 bg-white flex justify-end gap-3 rounded-b-2xl">
               <button
                 onClick={() => { setModalOpen(false); resetForm() }}

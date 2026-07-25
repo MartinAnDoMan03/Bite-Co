@@ -51,6 +51,7 @@ export async function POST(request) {
         const isActive = formData.get('isActive') === 'true';
         const type = formData.get('type');
         const discountAmount = formData.get('discountAmount');
+        const discountType = formData.get('discountType') || 'fixed';
         const sellerId = formData.get('sellerId');
         const sellerName = formData.get('sellerName');
         const promoFor = formData.get('promoFor');
@@ -58,6 +59,10 @@ export async function POST(request) {
 
         if (!title || !imageFile) {
             return withCORSHeaders(NextResponse.json({ success: false, message: 'Title and image are required' }, { status: 400 }));
+        }
+
+        if (discountType === 'percentage' && discountAmount && Number(discountAmount) > 100) {
+            return withCORSHeaders(NextResponse.json({ success: false, message: 'Persentase diskon tidak boleh lebih dari 100' }, { status: 400 }));
         }
 
         // PROSES UPLOAD GAMBAR KE FIREBASE STORAGE (ADMIN SDK)
@@ -85,6 +90,7 @@ export async function POST(request) {
             isActive: isActive,
             type: type || 'info',
             discountAmount: discountAmount ? Number(discountAmount) : null,
+            discountType: discountType,
             sellerId: sellerId || null,
             sellerName: sellerName || null,
             promoFor: promoFor || 'both',
