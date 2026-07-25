@@ -219,6 +219,75 @@ export async function POST(request) {
       console.log(`[ORDER] Cannot calculate distance - buyer coords: ${orderData.buyerLat}, ${orderData.buyerLng}, seller coords: ${sellerLat}, ${sellerLng}`);
     }
 
+    let validatedItems = orderData.items;
+    let recalculatedSubtotal = orderData.totalAmount;
+
+    if(sellerData && Array.isArray(sellerData.categories)) {
+      const menuPriceMap = {};
+      sellerData.categories.forEach(cat => {
+        (cat.items || []).forEach(menuItem => {
+          menuPriceMap[menuItem.id] = Number(menuItem.price) || 0;
+        });
+      });
+
+      validatedItems = orderData.items.map(item => {
+        const realPrice = menuPriceMap[item.id];
+        return {
+          ...item,
+          price: realPrice !== undefined ? realPrice : Math.max(0, Number(item.price) || 0),
+          qty: Math.max(1, Number(item.qty) || 1),
+        };
+      });
+
+      recalculatedSubtotal = validatedItems.reduce(
+        (sum, item) => sum  + item.price * item.qty,
+        0
+      );
+    }
+    const subtotal = recalculatedSubtotal;
+
+    let appliedPromo = null;
+    let discountAmount = 0;
+
+    try {
+      const now = new Date();
+      const promoSnapshot = await db.collection('promos')
+      .where('isActive', '==', true)
+      .where('type', '==', 'discount')
+      .get();
+
+      const isRantangan = (orderData.orderType || '').includes('Rantangan');
+
+      const candidates = promoSnapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(p => {
+          const sellerMatch = !p.sellerId || p.sellerId === orderData.sellerId;
+          const typeMatch = !p.promoFor || p.promoFor === 'both' || p.promoFor === (isRantangan ? 'rantangan' : 'catering');
+          const startOk = !p.startDate || new Date(p.startDate) <= now;
+          const endOk = !p.endDate || new Date(p.endDate) >= now;
+          return sellerMatch && typeMatch && startOk && endOk;
+        });
+
+        candidates.sort((a, b) => {
+          if (!!a.sellerId !== !!b.sellerId) return a.sellerId ? -1 : 1;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+
+        const promo = candidates[0];
+        if (promo && promo.discountAmount) {
+          discountAmount = promo.discountType === 'percentage'
+          ? Math.round(subtotal * (Number(promo.discountAmount) / 100))
+          : Number(promo.discountAmount);
+          discountAmount = Math.min(discountAmount, subtotal);
+          appliedPromo = { id: promo.id, title: promo.title, discountType: promo.discountType || 'fixed', discountAmount: promo.discountAmount };
+        }
+    } catch (err) {
+      console.error('Error applying promo:', err);
+      // Gagal mencari promo, lanjut tanpa diskon
+    }
+
+    const finalTotal = subtotal - discountAmount;
+
     // Create new order  
     // New orders always start with awaiting seller approval
     let statusProgress = 'awaiting_seller_approval';
@@ -230,7 +299,10 @@ export async function POST(request) {
       buyerPhone: fullBuyerData.phone || '',
       sellerId: orderData.sellerId,
       items: orderData.items,
-      totalAmount: orderData.totalAmount,
+      subtotal: subtotal,
+      discountAmount: discountAmount,
+      promoApplied: appliedPromo,
+      totalAmount: finalTotal,
       status: 'pending',
       statusProgress, // <-- add statusProgress to Firestore
       deliveryAddress: orderData.deliveryAddress || '',
