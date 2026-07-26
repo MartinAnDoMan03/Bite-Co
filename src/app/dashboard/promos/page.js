@@ -7,12 +7,14 @@ import { collection, onSnapshot, updateDoc, deleteDoc, doc, query, orderBy, getD
 
 export default function PromosPage() {
   const [promos, setPromos] = useState([])
-  const [sellers, setSellers] = useState([]) // State baru untuk menyimpan daftar seller
+  const [sellers, setSellers] = useState([]) 
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPromo, setEditingPromo] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [imageFile, setImageFile] = useState(null) 
+  const [sellerSearchQuery, setSellerSearchQuery] = useState('')
+  const [sellerDropdownOpen, setSellerDropdownOpen] = useState(false)
   
   const [form, setForm] = useState({
     title: '',
@@ -31,6 +33,19 @@ export default function PromosPage() {
 
   const inputStyle = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#711330]/30 bg-white";
 
+  const filteredSellers = sellers.filter(s =>
+    s.outletName.toLowerCase().includes(sellerSearchQuery.toLowerCase())
+  )
+
+  const selectSeller = (seller) => {
+    if (!seller) {
+      setForm(f => ({ ...f, sellerId: '', sellerName: '' }))
+    } else {
+      setForm(f => ({ ...f, sellerId: seller.id, sellerName: seller.outletName }))
+    }
+    setSellerDropdownOpen(false)
+  }
+  
   // Ambil data promo (Realtime) & Ambil data seller (Sekali muat)
   useEffect(() => {
     // 1. Fetch Promos
@@ -64,6 +79,7 @@ export default function PromosPage() {
     setForm({ title: '', description: '', imageUrl: '', startDate: '', endDate: '', isActive: true, type: 'info', discountAmount: '', discountType: 'fixed', sellerId: '', sellerName: '', promoFor: 'both' })
     setImageFile(null)
     setEditingPromo(null)
+    setSellerSearchQuery('')
   }
 
   const openCreate = () => { resetForm(); setModalOpen(true) }
@@ -84,6 +100,7 @@ export default function PromosPage() {
       sellerName: promo.sellerName || '',
       promoFor: promo.promoFor || 'both',
     })
+    setSellerSearchQuery(promo.sellerName || '')
     setModalOpen(true)
   }
 
@@ -378,34 +395,46 @@ export default function PromosPage() {
                   <h3 className="font-semibold text-slate-800 text-sm uppercase tracking-wider">Target Promo (Opsional)</h3>
                   
                   {/* DROPDOWN FETCH DATA SELLER */}
-                  <div>
+                  <div className="relative">
                     <label className="text-sm font-medium text-slate-700 block mb-1">Pilih Toko / Seller</label>
-                    <select
+                    <input
+                      type="text"
                       className={inputStyle}
-                      value={form.sellerId}
-                      onChange={e => {
-                        const selectedId = e.target.value;
-                        if (!selectedId) {
-                          // Jika pilih "Berlaku Global", kosongkan data seller
-                          setForm(f => ({ ...f, sellerId: '', sellerName: '' }));
-                        } else {
-                          // Temukan nama toko berdasarkan ID yang dipilih
-                          const selectedSeller = sellers.find(s => s.id === selectedId);
-                          setForm(f => ({ 
-                            ...f, 
-                            sellerId: selectedId, 
-                            sellerName: selectedSeller ? selectedSeller.outletName : '' 
-                          }));
-                        }
-                      }}
-                    >
-                      <option value="">-- Semua Toko (Global) --</option>
-                      {sellers.map(seller => (
-                        <option key={seller.id} value={seller.id}>
-                          {seller.outletName}
-                        </option>
-                      ))}
-                    </select>
+                      value={sellerDropdownOpen ? sellerSearchQuery : (form.sellerName || '')}
+                      onChange={e => { setSellerSearchQuery(e.target.value); setSellerDropdownOpen(true); }}
+                      onFocus={() => { setSellerSearchQuery(form.sellerName || ''); setSellerDropdownOpen(true); }}
+                      onBlur={() => setTimeout(() => setSellerDropdownOpen(false), 150)}
+                      placeholder="Cari nama toko... (kosongkan untuk Global)"
+                    />
+
+                    {sellerDropdownOpen && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => selectSeller(null)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-500 border-b border-slate-100"
+                        >
+                          -- Semua Toko (Global) --
+                        </button>
+
+                        {filteredSellers.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-slate-400">Tidak ditemukan</div>
+                        ) : (
+                          filteredSellers.map(seller => (
+                            <button
+                              type="button"
+                              key={seller.id}
+                              onClick={() => selectSeller(seller)}
+                              className={`w-full text-left px-3 py-2 text-sm hover:bg-[#711330]/5 ${
+                                form.sellerId === seller.id ? 'bg-[#711330]/10 text-[#711330] font-semibold' : 'text-slate-700'
+                              }`}
+                            >
+                              {seller.outletName}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div>
