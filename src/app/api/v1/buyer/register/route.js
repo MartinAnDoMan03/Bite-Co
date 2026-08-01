@@ -52,8 +52,8 @@ export async function POST(request) {
     const emailSent = await sendOTPEmail(email, otp, name);
     
     if (!emailSent) {
-      // If email fails, still return success but log the error
-      console.error('Failed to send OTP email, but user registration completed');
+      // Jangan kembalikan sukses jika email gagal di tahap development
+      return withCORSHeaders(createErrorResponse('Registrasi berhasil, tapi gagal mengirim email OTP. Silakan hubungi admin.', 500));
     }
 
     return withCORSHeaders(createSuccessResponse({

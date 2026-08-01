@@ -23,7 +23,7 @@ export const config = {
   appStore: {
     android: "https://play.google.com/store/apps/details?id=com.biteandco.app",
     ios: "https://apps.apple.com/app/bite-co/id1234567890", // Placeholder
-    webApp: "https://app.biteandco.com"
+    webApp: "https://app.biteandco.id"
   },
   
   // Contact Information
