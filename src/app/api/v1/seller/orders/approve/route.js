@@ -6,7 +6,7 @@ import midtransClient from 'midtrans-client';
 
 export async function POST(request) {
   const reqData = await request.json();
-  const { orderId, action, rejectionReason } = reqData; // action: 'approve' or 'reject'
+  const { orderId, action, rejectionReason } = reqData;
 
   console.log('Seller approve/reject request:', { orderId, action, rejectionReason });
 
@@ -19,7 +19,6 @@ export async function POST(request) {
   }
 
   try {
-    // Verify seller authentication
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return withCORSHeaders(createErrorResponse('Authorization header required', 401));
@@ -39,7 +38,6 @@ export async function POST(request) {
 
     const sellerData = authResult.sellerData;
 
-    // Get the order
     let orderDoc;
     try {
       orderDoc = await db.collection('orders').doc(orderId).get();
@@ -61,12 +59,10 @@ export async function POST(request) {
       requestedAction: action 
     });
 
-    // Verify this seller owns the order
     if (orderData.sellerId !== sellerData.id) {
       return withCORSHeaders(createErrorResponse('You can only manage your own orders', 403));
     }
 
-    // Check if order is in correct status for the action
     if (action === 'approve' && !['awaiting_seller_approval', 'waiting_approval'].includes(orderData.statusProgress)) {
       return withCORSHeaders(createErrorResponse(`Order is not awaiting seller approval. Current status: ${orderData.statusProgress}`, 400));
     }
@@ -76,7 +72,6 @@ export async function POST(request) {
     }
 
     if (action === 'reject') {
-      // Reject the order
       await db.collection('orders').doc(orderId).update({
         status: 'cancelled',
         statusProgress: 'cancelled',
@@ -91,7 +86,6 @@ export async function POST(request) {
     }
 
     if (action === 'approve') {
-      // For BiteEco or free orders, approve directly without payment
       if (orderData.orderType === 'Bite Eco' || orderData.totalAmount === 0 || orderData.paymentStatus === 'not_required') {
         await db.collection('orders').doc(orderId).update({
           status: 'processing',
@@ -108,14 +102,12 @@ export async function POST(request) {
         }));
       }
 
-      // For paid orders, create Midtrans payment link
       let isProduction = false;
       let serverKey = process.env.MIDTRANS_SANDBOX_SERVER_KEY;
       if (process.env.MIDTRANS_MODE === 'production') {
         isProduction = true;
         serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY;
       }
-      console.log('[APPROVE] serverKey yang beneran dipakai:', serverKey); 
       const snap = new midtransClient.Snap({
         isProduction,
         serverKey,
@@ -144,7 +136,6 @@ export async function POST(request) {
         return withCORSHeaders(createErrorResponse('Failed to create payment link: ' + err.message, 500));
       }
 
-      // Update order with payment link and approved status
       await db.collection('orders').doc(orderId).update({
         statusProgress: 'approved_awaiting_payment',
         snapUrl: snapResponse.redirect_url,

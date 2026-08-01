@@ -1,8 +1,9 @@
-
+// GET /api/v1/seller/orders/[orderId]/complete-daily-delivery
 import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 import { verifyToken } from '@/lib/auth';
 import { withCORSHeaders } from '@/lib/cors';
+import { createEarningIfCompleted } from '@/lib/sellerEarnings'; // <-- BARU
 
 /**
  * POST /api/v1/seller/orders/[orderId]/complete-daily-delivery
@@ -96,6 +97,11 @@ export async function POST(req, { params }) {
     };
 
     await orderRef.update(updateData);
+
+    // === BARU: generate seller earning kalau baru saja completed ===
+    await createEarningIfCompleted(orderId, orderData, newStatus);
+    // orderData dipakai (bukan hasil get ulang) karena field yg dibutuhin
+    // (sellerId, totalAmount, status) ga berubah oleh update ini
 
     // Calculate days remaining
     const today = new Date();

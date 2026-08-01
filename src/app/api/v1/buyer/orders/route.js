@@ -5,7 +5,6 @@ import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { sendNotification } from '@/lib/notificationSender';
 
-
 export async function OPTIONS() {
   return handleOptions();
 }
@@ -14,11 +13,10 @@ function wrapCORS(response) {
   return withCORSHeaders(response);
 }
 
-// Function to calculate distance between two points using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
   
-  const R = 6371; // Radius of the Earth in kilometers
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
@@ -26,19 +24,12 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
     Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  const distance = R * c; // Distance in kilometers
-  return Math.round(distance * 10) / 10; // Round to 1 decimal place
+  const distance = R * c;
+  return Math.round(distance * 10) / 10;
 }
 
 export async function GET(request) {
   try {
-    // Debug log for Vercel
-    console.log('[DEBUG][GET] Headers:', JSON.stringify(Object.fromEntries(request.headers.entries())));
-    console.log('[DEBUG][GET] MIDTRANS_MODE:', process.env.MIDTRANS_MODE);
-    console.log('[DEBUG][GET] MIDTRANS_SANDBOX_SERVER_KEY:', process.env.MIDTRANS_SANDBOX_SERVER_KEY);
-    console.log('[DEBUG][GET] MIDTRANS_PRODUCTION_SERVER_KEY:', process.env.MIDTRANS_PRODUCTION_SERVER_KEY);
-
-    // Verify buyer token
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return wrapCORS(createErrorResponse('Authorization header required', 401));
@@ -49,26 +40,22 @@ export async function GET(request) {
     try {
       buyerData = verifyBuyerToken(token);
     } catch (err) {
-      console.log('[DEBUG][GET] Token verification error:', err);
       return wrapCORS(createErrorResponse('Invalid or expired token', 401));
     }
 
     const buyerId = buyerData.id;
     console.log('[DEBUG][GET] Buyer ID:', buyerId);
 
-    // Get buyer's orders from Firestore
     const ordersSnapshot = await db.collection('orders')
       .where('buyerId', '==', buyerId)
       .orderBy('createdAt', 'desc')
       .get();
 
-    // Log the query for debugging index issues
     console.log('[FIRESTORE QUERY] buyerId ==', buyerId, 'orderBy createdAt desc');
 
     const orders = [];
     for (const doc of ordersSnapshot.docs) {
       const order = { id: doc.id, ...doc.data() };
-      // Check payment status in Midtrans if snapToken exists
       if (order.snapToken) {
         try {
           let isProduction = false;
@@ -87,10 +74,8 @@ export async function GET(request) {
         order.paymentStatus = order.status || 'pending';
       }
 
-      // Use stored statusProgress if exists, otherwise map status to statusProgress for frontend
       let statusProgress = order.statusProgress;
       if (!statusProgress) {
-        // Default: waiting_approval -> processing -> delivery -> completed
         if (order.status === 'pending' || order.paymentStatus === 'pending') {
           statusProgress = 'waiting_approval';
         } else if (
@@ -140,13 +125,6 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    // Debug log for Vercel
-    console.log('[DEBUG][POST] Headers:', JSON.stringify(Object.fromEntries(request.headers.entries())));
-    console.log('[DEBUG][POST] MIDTRANS_MODE:', process.env.MIDTRANS_MODE);
-    console.log('[DEBUG][POST] MIDTRANS_SANDBOX_SERVER_KEY:', process.env.MIDTRANS_SANDBOX_SERVER_KEY);
-    console.log('[DEBUG][POST] MIDTRANS_PRODUCTION_SERVER_KEY:', process.env.MIDTRANS_PRODUCTION_SERVER_KEY);
-
-    // Verify buyer token
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return wrapCORS(createErrorResponse('Authorization header required', 401));
@@ -157,14 +135,12 @@ export async function POST(request) {
     try {
       buyerData = verifyBuyerToken(token);
     } catch (err) {
-      console.log('[DEBUG][POST] Token verification error:', err);
       return wrapCORS(createErrorResponse('Invalid or expired token', 401));
     }
 
     const buyerId = buyerData.id;
     console.log('[DEBUG][POST] Buyer ID:', buyerId);
     
-    // Fetch buyer data from database to get complete profile
     let fullBuyerData = null;
     try {
       const buyerDoc = await db.collection('buyers').doc(buyerId).get();
@@ -179,30 +155,23 @@ export async function POST(request) {
     }
     
     const orderData = await request.json();
-    console.log('[DEBUG][POST] Order data received:', JSON.stringify(orderData, null, 2));
 
-    // Validate order data
     if (!orderData.sellerId || !orderData.items || (orderData.totalAmount === undefined || orderData.totalAmount === null)) {
-      console.log('[DEBUG][POST] Validation failed - missing required fields');
       return wrapCORS(createErrorResponse('Seller ID, items, and total amount are required', 400));
     }
 
-    // Allow totalAmount of 0 for BiteEco orders
     if (orderData.totalAmount < 0) {
-      console.log('[DEBUG][POST] Validation failed - negative amount');
       return wrapCORS(createErrorResponse('Total amount cannot be negative', 400));
     }
 
-    // Fetch seller data to get seller coordinates
     let sellerData = null;
-    let sellerLat = orderData.sellerLat || null; // Use from request first
-    let sellerLng = orderData.sellerLng || null; // Use from request first
+    let sellerLat = orderData.sellerLat || null;
+    let sellerLng = orderData.sellerLng || null;
     
     try {
       const sellerDoc = await db.collection('sellers').doc(orderData.sellerId).get();
       if (sellerDoc.exists) {
         sellerData = sellerDoc.data();
-        // Use coordinates from database if not provided in request
         if (!sellerLat) sellerLat = sellerData.pinLat || null;
         if (!sellerLng) sellerLng = sellerData.pinLng || null;
       }
@@ -210,7 +179,6 @@ export async function POST(request) {
       console.error('Error fetching seller data:', error);
     }
 
-    // Calculate distance between buyer and seller if coordinates are available
     let distance = null;
     if (orderData.buyerLat && orderData.buyerLng && sellerLat && sellerLng) {
       distance = calculateDistance(orderData.buyerLat, orderData.buyerLng, sellerLat, sellerLng);
@@ -219,77 +187,6 @@ export async function POST(request) {
       console.log(`[ORDER] Cannot calculate distance - buyer coords: ${orderData.buyerLat}, ${orderData.buyerLng}, seller coords: ${sellerLat}, ${sellerLng}`);
     }
 
-    let validatedItems = orderData.items;
-    let recalculatedSubtotal = orderData.totalAmount;
-
-    if(sellerData && Array.isArray(sellerData.categories)) {
-      const menuPriceMap = {};
-      sellerData.categories.forEach(cat => {
-        (cat.items || []).forEach(menuItem => {
-          menuPriceMap[menuItem.id] = Number(menuItem.price) || 0;
-        });
-      });
-
-      validatedItems = orderData.items.map(item => {
-        const realPrice = menuPriceMap[item.id];
-        return {
-          ...item,
-          price: realPrice !== undefined ? realPrice : Math.max(0, Number(item.price) || 0),
-          qty: Math.max(1, Number(item.qty) || 1),
-        };
-      });
-
-      recalculatedSubtotal = validatedItems.reduce(
-        (sum, item) => sum  + item.price * item.qty,
-        0
-      );
-    }
-    const subtotal = recalculatedSubtotal;
-
-    let appliedPromo = null;
-    let discountAmount = 0;
-
-    try {
-      const now = new Date();
-      const promoSnapshot = await db.collection('promos')
-      .where('isActive', '==', true)
-      .where('type', '==', 'discount')
-      .get();
-
-      const isRantangan = (orderData.orderType || '').includes('Rantangan');
-
-      const candidates = promoSnapshot.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(p => {
-          const sellerMatch = !p.sellerId || p.sellerId === orderData.sellerId;
-          const typeMatch = !p.promoFor || p.promoFor === 'both' || p.promoFor === (isRantangan ? 'rantangan' : 'catering');
-          const startOk = !p.startDate || new Date(p.startDate) <= now;
-          const endOk = !p.endDate || new Date(p.endDate) >= now;
-          return sellerMatch && typeMatch && startOk && endOk;
-        });
-
-        candidates.sort((a, b) => {
-          if (!!a.sellerId !== !!b.sellerId) return a.sellerId ? -1 : 1;
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-
-        const promo = candidates[0];
-        if (promo && promo.discountAmount) {
-          discountAmount = promo.discountType === 'percentage'
-          ? Math.round(subtotal * (Number(promo.discountAmount) / 100))
-          : Number(promo.discountAmount);
-          discountAmount = Math.min(discountAmount, subtotal);
-          appliedPromo = { id: promo.id, title: promo.title, discountType: promo.discountType || 'fixed', discountAmount: promo.discountAmount };
-        }
-    } catch (err) {
-      console.error('Error applying promo:', err);
-      // Gagal mencari promo, lanjut tanpa diskon
-    }
-
-    const finalTotal = subtotal - discountAmount;
-
-    // Create new order  
-    // New orders always start with awaiting seller approval
     let statusProgress = 'awaiting_seller_approval';
     
     const newOrder = {
@@ -299,12 +196,9 @@ export async function POST(request) {
       buyerPhone: fullBuyerData.phone || '',
       sellerId: orderData.sellerId,
       items: orderData.items,
-      subtotal: subtotal,
-      discountAmount: discountAmount,
-      promoApplied: appliedPromo,
-      totalAmount: finalTotal,
+      totalAmount: orderData.totalAmount,
       status: 'pending',
-      statusProgress, // <-- add statusProgress to Firestore
+      statusProgress,
       deliveryAddress: orderData.deliveryAddress || '',
       kelurahan: orderData.kelurahan || '',
       kecamatan: orderData.kecamatan || '',
@@ -313,43 +207,35 @@ export async function POST(request) {
       notes: orderData.notes || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      orderType: orderData.orderType || '', // Store OrderType if provided
-      // Add date fields for Rantangan orders
+      orderType: orderData.orderType || '',
       startDate: orderData.startDate || null,
       endDate: orderData.endDate || null,
       packageType: orderData.packageType || null,
-      // Add buyer coordinates
       buyerLat: orderData.buyerLat || null,
       buyerLng: orderData.buyerLng || null,
-      // Add seller coordinates from seller document
       sellerLat: sellerLat,
       sellerLng: sellerLng,
       sellerName: sellerData?.outletName || sellerData?.name || null,
       sellerAddress: sellerData?.address || null,
       sellerPinAddress: sellerData?.pinAddress || null,
-      // Add calculated distance
       distance: distance,
     };
 
-    // Save to Firestore
     const orderRef = await db.collection('orders').add(newOrder);
 
-    // NEW FLOW: All orders go to seller approval first
     await db.collection('orders').doc(orderRef.id).update({
-      status: 'pending', // Order created but not paid yet
-      statusProgress: 'awaiting_seller_approval', // Go directly to seller approval
-      paymentStatus: 'pending' // Payment will be processed after seller approval
+      status: 'pending',
+      statusProgress: 'awaiting_seller_approval',
+      paymentStatus: 'pending'
     });
 
-    // For BiteEco orders (free), mark payment as not needed
     if (orderData.orderType === 'Bite Eco' || orderData.totalAmount === 0) {
       await db.collection('orders').doc(orderRef.id).update({
         paymentMethod: 'Free - Bite Eco',
-        paymentStatus: 'not_required' // Special status for free orders
+        paymentStatus: 'not_required'
       });
     }
 
-    // Kirim notifikasi ke seller kalau ada order baru masuk
     if (sellerData?.expoPushToken) {
       try {
         await sendNotification(
@@ -360,7 +246,6 @@ export async function POST(request) {
         );
       } catch (notifError) {
         console.error('Error sending notification to seller:', notifError);
-        // Jangan gagalkan pembuatan order cuma karena notifikasi gagal
       }
     }
 

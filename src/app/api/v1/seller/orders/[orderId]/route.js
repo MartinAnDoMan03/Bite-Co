@@ -4,6 +4,7 @@ import { db } from "@/firebase/configure";
 // PATCH /api/v1/seller/orders/[orderId]
 import { verifyToken } from '@/lib/auth';
 import { withCORSHeaders } from '@/lib/cors';
+import { createEarningIfCompleted } from '@/lib/sellerEarnings'; // <-- BARU
 
 export async function GET(req, { params }) {
   const { orderId } = params;
@@ -65,7 +66,12 @@ export async function PATCH(req, { params }) {
     }
     
     await orderRef.update(updateData);
-    
+
+    // === BARU: generate seller earning kalau baru saja completed ===
+    await createEarningIfCompleted(orderId, orderData, statusProgress);
+    // orderData di sini adalah data SEBELUM patch (masih punya status pembayaran asli),
+    // yang memang yang kita butuhin buat validasi status === 'success'
+
     return withCORSHeaders(NextResponse.json({ 
       success: true, 
       statusProgress,
