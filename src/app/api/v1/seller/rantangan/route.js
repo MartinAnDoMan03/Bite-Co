@@ -82,7 +82,7 @@ export async function POST(request) {
   }
 }
 
-// PUT: Update Rantangan packages (batch update)
+// PUT: Update SINGLE Rantangan package by ID
 export async function PUT(request) {
   try {
     const authResult = verifyToken(request);
@@ -90,25 +90,15 @@ export async function PUT(request) {
       return withCORSHeaders(createErrorResponse(authResult.error, authResult.status));
     }
 
+    const { searchParams } = new URL(request.url);
+    const packageId = searchParams.get('id'); 
+
+    if (!packageId) {
+      return withCORSHeaders(createErrorResponse('Package ID required for update', 400));
+    }
+
     const { sellerId } = authResult;
     const body = await request.json();
-    let packages = body.packages;
-
-    if (!Array.isArray(packages) || packages.length !== 3) {
-      return withCORSHeaders(createErrorResponse('Payload must be an array of 3 packages', 400));
-    }
-
-    // Validate each package
-    for (const pkg of packages) {
-      if (
-        pkg.type === undefined || pkg.type === null || pkg.type === '' ||
-        pkg.name === undefined || pkg.name === null || pkg.name === '' ||
-        pkg.description === undefined || pkg.description === null || pkg.description === '' ||
-        pkg.price === undefined || pkg.price === null || pkg.price === '' || isNaN(Number(pkg.price))
-      ) {
-        return withCORSHeaders(createErrorResponse('All fields are required', 400));
-      }
-    }
 
     // Get seller document
     const sellerRef = db.collection('sellers').doc(sellerId);
@@ -117,17 +107,25 @@ export async function PUT(request) {
       return withCORSHeaders(createErrorResponse('Seller not found', 404));
     }
 
-    // Update all packages
-    const updatedPackages = packages.map(pkg => ({
-      ...pkg,
-      type: pkg.type.toLowerCase(),
-      price: parseFloat(pkg.price),
+    let packages = sellerDoc.data().rantanganPackages || [];
+    const packageIndex = packages.findIndex(pkg => pkg.id === packageId);
+
+    if (packageIndex === -1) {
+      return withCORSHeaders(createErrorResponse('Package not found', 404));
+    }
+
+    // Update HANYA paket yang ID-nya cocok
+    packages[packageIndex] = {
+      ...packages[packageIndex],
+      name: body.name || packages[packageIndex].name,
+      description: body.description || packages[packageIndex].description,
+      price: body.price !== undefined ? parseFloat(body.price) : packages[packageIndex].price,
       updatedAt: new Date().toISOString(),
-    }));
+    };
 
-    await sellerRef.update({ rantanganPackages: updatedPackages });
+    await sellerRef.update({ rantanganPackages: packages });
 
-    return withCORSHeaders(createSuccessResponse({ data: updatedPackages }, 'Rantangan packages updated successfully'));
+    return withCORSHeaders(createSuccessResponse({ data: packages[packageIndex] }, 'Rantangan package updated successfully'));
   } catch (error) {
     return withCORSHeaders(createErrorResponse(error.message || 'Internal server error'));
   }
