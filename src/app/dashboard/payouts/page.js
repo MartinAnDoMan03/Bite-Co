@@ -1,57 +1,38 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { db } from '../../../lib/firebase' // <-- SESUAIKAN jumlah '../' sesuai lokasi file kamu
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { useState, useEffect, useCallback } from 'react'
 
 export default function PayoutPage() {
-  const [earnings, setEarnings] = useState([])
+  const [sellers, setSellers] = useState([])
+  const [grandTotal, setGrandTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [expandedSeller, setExpandedSeller] = useState(null)
   const [markingPaid, setMarkingPaid] = useState(null)
 
-  useEffect(() => {
-    const q = query(
-      collection(db, 'sellerEarnings'),
-      where('payoutStatus', '==', 'pending')
-    )
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = []
-      snapshot.forEach((doc) => {
-        data.push({ earningId: doc.id, ...doc.data() })
+  const fetchPayouts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/admin/payouts', {
+        method: 'GET',
+        credentials: 'include', // penting: biar cookie admin token ikut kekirim
       })
-      setEarnings(data)
-      setLoading(false)
-    }, (error) => {
-      console.error('Error fetching sellerEarnings:', error)
-      setLoading(false)
-    })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Gagal mengambil data payout')
 
-    return () => unsubscribe()
+      setSellers(data.sellers || [])
+      setGrandTotal(data.grandTotal || 0)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching payouts:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  // Group earnings by seller (sama pola kayak AnalyticsPage groupBy category/location)
-  const sellerMap = {}
-  let grandTotal = 0
-
-  earnings.forEach((e) => {
-    if (!sellerMap[e.sellerId]) {
-      sellerMap[e.sellerId] = {
-        sellerId: e.sellerId,
-        sellerName: e.sellerName || 'Unknown Seller',
-        orderCount: 0,
-        totalNetAmount: 0,
-        earnings: [],
-      }
-    }
-    sellerMap[e.sellerId].orderCount += 1
-    sellerMap[e.sellerId].totalNetAmount += e.netAmount
-    sellerMap[e.sellerId].earnings.push(e)
-    grandTotal += e.netAmount
-  })
-
-  const sellers = Object.values(sellerMap).sort((a, b) => b.totalNetAmount - a.totalNetAmount)
+  useEffect(() => {
+    fetchPayouts()
+  }, [fetchPayouts])
 
   const formatRupiah = (amount) => `Rp ${amount.toLocaleString('id-ID')}`
 
@@ -63,8 +44,6 @@ export default function PayoutPage() {
 
     setMarkingPaid(sellerId)
     try {
-      // Aksi tulis data tetap lewat API route (bukan client Firestore write),
-      // biar tervalidasi admin & pakai firebase-admin di server (lebih aman utk data keuangan)
       const res = await fetch(`/api/v1/admin/payouts/${sellerId}/mark-paid`, {
         method: 'POST',
         credentials: 'include',
@@ -74,7 +53,9 @@ export default function PayoutPage() {
       if (!res.ok) throw new Error(data.error || 'Gagal menandai lunas')
 
       alert(`Berhasil! ${data.updatedCount} order ditandai lunas.\nBatch ID: ${data.payoutBatchId}`)
-      // Ga perlu manual refresh -- onSnapshot otomatis update begitu Firestore berubah
+
+      // Ga ada onSnapshot lagi, jadi refetch manual biar tabel update
+      await fetchPayouts()
     } catch (err) {
       alert(`Gagal: ${err.message}`)
     } finally {
@@ -86,6 +67,21 @@ export default function PayoutPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#711330]"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white p-10 rounded-lg shadow text-center">
+        <p className="text-red-500 font-medium mb-2">Gagal memuat data payout</p>
+        <p className="text-gray-400 text-sm mb-4">{error}</p>
+        <button
+          onClick={() => { setLoading(true); fetchPayouts() }}
+          className="px-4 py-2 bg-[#711330] text-white text-sm rounded-full hover:opacity-90"
+        >
+          Coba Lagi
+        </button>
       </div>
     )
   }

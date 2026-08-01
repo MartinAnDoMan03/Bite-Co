@@ -61,6 +61,16 @@ const navigation = [
     )
   },
   { 
+  name: 'Payouts', 
+  href: '/dashboard/payouts', 
+  icon: (
+    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+      <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+      <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1z" clipRule="evenodd" />
+    </svg>
+  )
+},
+  { 
   name: 'Promos', 
   href: '/dashboard/promos', 
   icon: (
