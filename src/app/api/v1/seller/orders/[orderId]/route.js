@@ -3,8 +3,12 @@ import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 // PATCH /api/v1/seller/orders/[orderId]
 import { verifyToken } from '@/lib/auth';
-import { withCORSHeaders } from '@/lib/cors';
-import { createEarningIfCompleted } from '@/lib/sellerEarnings'; // <-- BARU
+import { withCORSHeaders, handleOptions } from '@/lib/cors';
+import { createEarningIfCompleted } from '@/lib/sellerEarnings'; 
+
+export async function OPTIONS() {
+  return handleOptions();
+}
 
 export async function GET(req, { params }) {
   const { orderId } = params;
@@ -16,12 +20,12 @@ export async function GET(req, { params }) {
     const doc = await db.collection("orders").doc(orderId).get();
     console.log('[DEBUG][Order Detail] doc.exists:', doc.exists);
     if (!doc.exists) {
-      return NextResponse.json({ error: "Order not found", debug: { orderId, exists: doc.exists } }, { status: 404 });
+      return withCORSHeaders(NextResponse.json({ error: "Order not found", debug: { orderId, exists: doc.exists } }, { status: 404 }));
     }
     const order = { id: doc.id, ...doc.data() };
-    return NextResponse.json({ order });
+    return withCORSHeaders(NextResponse.json({ order }));
   } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return withCORSHeaders(NextResponse.json({ error: e.message }, { status: 500 }));
   }
 }
 

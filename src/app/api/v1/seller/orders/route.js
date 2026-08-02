@@ -1,8 +1,12 @@
-// GET /api/v1/seller/orders (list all orders for seller, optional for future use)
+// GET /api/v1/seller/orders
 import { NextResponse } from "next/server";
 import { verifyToken } from '@/lib/auth';
-import { withCORSHeaders } from '@/lib/cors';
+import { withCORSHeaders, handleOptions } from '@/lib/cors'; 
 import { db } from '@/firebase/configure';
+
+export async function OPTIONS() {
+  return handleOptions();
+}
 
 export async function GET(req) {
   try {
