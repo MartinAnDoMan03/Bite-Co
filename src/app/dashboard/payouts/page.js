@@ -14,7 +14,7 @@ export default function PayoutPage() {
     try {
       const res = await fetch('/api/v1/admin/payouts', {
         method: 'GET',
-        credentials: 'include', // penting: biar cookie admin token ikut kekirim
+        credentials: 'include',
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal mengambil data payout')
@@ -54,7 +54,6 @@ export default function PayoutPage() {
 
       alert(`Berhasil! ${data.updatedCount} order ditandai lunas.\nBatch ID: ${data.payoutBatchId}`)
 
-      // Ga ada onSnapshot lagi, jadi refetch manual biar tabel update
       await fetchPayouts()
     } catch (err) {
       alert(`Gagal: ${err.message}`)
@@ -116,6 +115,7 @@ export default function PayoutPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rekening Tujuan</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jumlah Order</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Harus Dibayar</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
@@ -136,6 +136,18 @@ export default function PayoutPage() {
                         {seller.sellerName}
                       </button>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {seller.hasBankInfo ? (
+                        <div>
+                          <div className="font-medium text-gray-900">{seller.bankName}</div>
+                          <div className="text-gray-500 font-mono text-xs">{seller.bankAccountNumber}</div>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium">
+                          ⚠ Data rekening belum lengkap
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {seller.orderCount} order
                     </td>
@@ -145,8 +157,9 @@ export default function PayoutPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <button
                         onClick={() => handleMarkPaid(seller.sellerId, seller.sellerName)}
-                        disabled={markingPaid === seller.sellerId}
-                        className="px-4 py-1.5 bg-[#711330] text-white text-sm rounded-full hover:opacity-90 disabled:opacity-50"
+                        disabled={markingPaid === seller.sellerId || !seller.hasBankInfo}
+                        title={!seller.hasBankInfo ? 'Lengkapi data rekening seller ini terlebih dahulu' : undefined}
+                        className="px-4 py-1.5 bg-[#711330] text-white text-sm rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {markingPaid === seller.sellerId ? 'Memproses...' : 'Tandai Lunas'}
                       </button>
@@ -155,7 +168,7 @@ export default function PayoutPage() {
 
                   {expandedSeller === seller.sellerId && (
                     <tr>
-                      <td colSpan={4} className="bg-gray-50 px-6 py-4">
+                      <td colSpan={5} className="bg-gray-50 px-6 py-4">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-gray-400 text-xs uppercase">
