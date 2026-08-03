@@ -64,9 +64,10 @@ export async function PATCH(req, { params }) {
       updatedAt: new Date().toISOString()
     };
 
-    if (statusProgress === 'completed') {
-    updateData.completedAt = new Date().toISOString();
-    }
+    const now = new Date().toISOString();
+    if (statusProgress === 'processing') updateData.processingAt = now;
+    if (statusProgress === 'delivery') updateData.deliveryAt = now;
+    if (statusProgress === 'completed') updateData.completedAt = now;
     
     // Add daily delivery logs if provided
     if (dailyDeliveryLogs !== undefined) {
