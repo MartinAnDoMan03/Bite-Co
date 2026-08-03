@@ -30,6 +30,7 @@ export async function GET(request, { params }) {
     if (!serverKey) {
       return withCORSHeaders(
         NextResponse.json({ error: 'Missing Midtrans server key' }, { status: 500 })
+    
       );
     }
     const auth = Buffer.from(serverKey + ':').toString('base64');
@@ -40,8 +41,12 @@ export async function GET(request, { params }) {
         'Content-Type': 'application/json',
       },
     });
+    // TAMBAHAN DEBUG SEMENTARA — hapus lagi setelah selesai cek
     return withCORSHeaders(
-      NextResponse.json(res.data)
+      NextResponse.json({
+        ...res.data,
+        _debug_mode: process.env.MIDTRANS_MODE || 'NOT SET',
+      })
     );
   } catch (error) {
     return withCORSHeaders(
