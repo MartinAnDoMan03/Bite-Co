@@ -41,13 +41,6 @@ export async function GET(request, { params }) {
         'Content-Type': 'application/json',
       },
     });
-    // TAMBAHAN DEBUG SEMENTARA — hapus lagi setelah selesai cek
-    return withCORSHeaders(
-      NextResponse.json({
-        ...res.data,
-        _debug_mode: process.env.MIDTRANS_MODE || 'NOT SET',
-      })
-    );
   } catch (error) {
     return withCORSHeaders(
       NextResponse.json({ error: 'Failed to fetch Midtrans status', debug: error.message }, { status: 500 })

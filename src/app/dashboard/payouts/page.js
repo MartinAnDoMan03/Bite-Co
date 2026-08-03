@@ -8,7 +8,7 @@ export default function PayoutPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [expandedSeller, setExpandedSeller] = useState(null)
-  const [markingPaid, setMarkingPaid] = useState(null)
+  const [markingPaidId, setMarkingPaidId] = useState(null) // sekarang nyimpen earningId, bukan sellerId
 
   const fetchPayouts = useCallback(async () => {
     try {
@@ -36,15 +36,16 @@ export default function PayoutPage() {
 
   const formatRupiah = (amount) => `Rp ${amount.toLocaleString('id-ID')}`
 
-  const handleMarkPaid = async (sellerId, sellerName) => {
+  // Tandai lunas SATU order/earning saja, bukan semua earning milik seller
+  const handleMarkPaid = async (earningId, orderIdShort, sellerName) => {
     const confirmed = window.confirm(
-      `Tandai semua earning "${sellerName}" sebagai SUDAH DIBAYAR?\n\nPastikan kamu sudah benar-benar transfer dana ke rekening seller ini sebelum konfirmasi.`
+      `Tandai order "${orderIdShort}..." (${sellerName}) sebagai SUDAH DIBAYAR?\n\nPastikan kamu sudah benar-benar transfer dana untuk order ini sebelum konfirmasi.`
     )
     if (!confirmed) return
 
-    setMarkingPaid(sellerId)
+    setMarkingPaidId(earningId)
     try {
-      const res = await fetch(`/api/v1/admin/payouts/${sellerId}/mark-paid`, {
+      const res = await fetch(`/api/v1/admin/payouts/earning/${earningId}/mark-paid`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -52,13 +53,11 @@ export default function PayoutPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal menandai lunas')
 
-      alert(`Berhasil! ${data.updatedCount} order ditandai lunas.\nBatch ID: ${data.payoutBatchId}`)
-
       await fetchPayouts()
     } catch (err) {
       alert(`Gagal: ${err.message}`)
     } finally {
-      setMarkingPaid(null)
+      setMarkingPaidId(null)
     }
   }
 
@@ -117,8 +116,7 @@ export default function PayoutPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rekening Tujuan</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jumlah Order</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Harus Dibayar</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Pending</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -154,21 +152,16 @@ export default function PayoutPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {formatRupiah(seller.totalNetAmount)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => handleMarkPaid(seller.sellerId, seller.sellerName)}
-                        disabled={markingPaid === seller.sellerId || !seller.hasBankInfo}
-                        title={!seller.hasBankInfo ? 'Lengkapi data rekening seller ini terlebih dahulu' : undefined}
-                        className="px-4 py-1.5 bg-[#711330] text-white text-sm rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {markingPaid === seller.sellerId ? 'Memproses...' : 'Tandai Lunas'}
-                      </button>
-                    </td>
                   </tr>
 
                   {expandedSeller === seller.sellerId && (
                     <tr>
-                      <td colSpan={5} className="bg-gray-50 px-6 py-4">
+                      <td colSpan={4} className="bg-gray-50 px-6 py-4">
+                        {!seller.hasBankInfo && (
+                          <p className="text-xs text-amber-700 mb-3">
+                            ⚠ Lengkapi data rekening seller ini dulu sebelum menandai order manapun lunas.
+                          </p>
+                        )}
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-gray-400 text-xs uppercase">
@@ -177,22 +170,36 @@ export default function PayoutPage() {
                               <th className="text-left py-2">Gross</th>
                               <th className="text-left py-2">Fee ({seller.earnings[0]?.platformFeePercent}%)</th>
                               <th className="text-left py-2">Net</th>
+                              <th className="text-right py-2">Aksi</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {seller.earnings.map((e) => (
-                              <tr key={e.earningId} className="border-t border-gray-100">
-                                <td className="py-2 text-gray-500 font-mono text-xs">
-                                  {e.orderId.slice(0, 12)}...
-                                </td>
-                                <td className="py-2 text-gray-600">{e.buyerName || '-'}</td>
-                                <td className="py-2 text-gray-600">{formatRupiah(e.grossAmount)}</td>
-                                <td className="py-2 text-gray-400">{formatRupiah(e.platformFee)}</td>
-                                <td className="py-2 font-medium text-gray-900">
-                                  {formatRupiah(e.netAmount)}
-                                </td>
-                              </tr>
-                            ))}
+                            {seller.earnings.map((e) => {
+                              const shortId = e.orderId.slice(0, 12)
+                              return (
+                                <tr key={e.earningId} className="border-t border-gray-100">
+                                  <td className="py-2 text-gray-500 font-mono text-xs">
+                                    {shortId}...
+                                  </td>
+                                  <td className="py-2 text-gray-600">{e.buyerName || '-'}</td>
+                                  <td className="py-2 text-gray-600">{formatRupiah(e.grossAmount)}</td>
+                                  <td className="py-2 text-gray-400">{formatRupiah(e.platformFee)}</td>
+                                  <td className="py-2 font-medium text-gray-900">
+                                    {formatRupiah(e.netAmount)}
+                                  </td>
+                                  <td className="py-2 text-right">
+                                    <button
+                                      onClick={() => handleMarkPaid(e.earningId, shortId, seller.sellerName)}
+                                      disabled={markingPaidId === e.earningId || !seller.hasBankInfo}
+                                      title={!seller.hasBankInfo ? 'Lengkapi data rekening seller ini terlebih dahulu' : undefined}
+                                      className="px-3 py-1 bg-[#711330] text-white text-xs rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      {markingPaidId === e.earningId ? '...' : 'Tandai Lunas'}
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </td>
