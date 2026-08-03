@@ -1,6 +1,7 @@
 import { db } from '@/firebase/configure';
 import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
+import { createEarningIfCompleted } from '@/lib/sellerEarnings';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -26,15 +27,15 @@ export async function POST(req) {
     }
 
     // Verify Midtrans Signature
-const crypto = require('crypto');
-const serverKey = process.env.MIDTRANS_MODE === 'production'
-  ? process.env.MIDTRANS_PRODUCTION_SERVER_KEY
-  : process.env.MIDTRANS_SANDBOX_SERVER_KEY;
+    const crypto = require('crypto');
+    const serverKey = process.env.MIDTRANS_MODE === 'production'
+      ? process.env.MIDTRANS_PRODUCTION_SERVER_KEY
+      : process.env.MIDTRANS_SANDBOX_SERVER_KEY;
     const expectedSignature = crypto
       .createHash('sha512')
       .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
       .digest('hex');
-    
+
     if (signature_key !== expectedSignature) {
       console.error('[MIDTRANS][NOTIF] Invalid signature for order:', order_id);
       return withCORSHeaders(new Response(
@@ -51,6 +52,10 @@ const serverKey = process.env.MIDTRANS_MODE === 'production'
       // Always return 200 OK for Midtrans, but include error in body
       return withCORSHeaders(new Response(JSON.stringify({ error: 'Order not found', order_id }), { status: 200 }));
     }
+
+    // Simpan data order SEBELUM diupdate -- dibutuhkan buat bikin sellerEarnings
+    // (sellerId, totalAmount, buyerName, dll)
+    const orderData = orderSnap.data();
 
     // Map Midtrans status to your app's status and statusProgress
     let newStatus = transaction_status;
@@ -76,6 +81,12 @@ const serverKey = process.env.MIDTRANS_MODE === 'production'
     if (newStatusProgress) updateData.statusProgress = newStatusProgress;
 
     await orderRef.update(updateData);
+
+    // Begitu pembayaran settle/capture, langsung catat earning seller --
+    // TIDAK menunggu order sampai statusProgress 'completed'
+    if (newStatus === 'success') {
+      await createEarningIfCompleted(order_id, orderData, newStatus);
+    }
 
     console.log('[MIDTRANS][NOTIF] Order updated:', order_id, '->', newStatus, newStatusProgress);
     return withCORSHeaders(new Response(JSON.stringify({ message: 'Order status updated', status: newStatus, statusProgress: newStatusProgress, order_id }), { status: 200 }));
