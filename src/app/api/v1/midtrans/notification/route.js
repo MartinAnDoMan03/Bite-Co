@@ -26,8 +26,10 @@ export async function POST(req) {
     }
 
     // Verify Midtrans Signature
-    const crypto = require('crypto');
-    const serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY || process.env.MIDTRANS_SANDBOX_SERVER_KEY;
+const crypto = require('crypto');
+const serverKey = process.env.MIDTRANS_MODE === 'production'
+  ? process.env.MIDTRANS_PRODUCTION_SERVER_KEY
+  : process.env.MIDTRANS_SANDBOX_SERVER_KEY;
     const expectedSignature = crypto
       .createHash('sha512')
       .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
