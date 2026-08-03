@@ -96,6 +96,10 @@ export async function POST(req, { params }) {
       updatedAt: new Date().toISOString()
     };
 
+    if (newStatus === 'completed') {
+      updateData.completedAt = new Date().toISOString();
+    }
+
     await orderRef.update(updateData);
 
     // === BARU: generate seller earning kalau baru saja completed ===
