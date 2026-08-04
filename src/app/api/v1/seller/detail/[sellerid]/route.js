@@ -73,6 +73,7 @@ export async function GET(req, context) {
       rating: data.rating || 0,
       rating_count: data.rating_count || 0,
       categories,
+      cateringPackages: data.cateringPackages || [],
       storeBanner: data.storeBanner || data.banner || null, // Add this line
       banner: data.banner || data.storeBanner || null, // For compatibility
       distance: distance, // Add distance field
