@@ -25,8 +25,12 @@ Jawab HANYA dengan JSON valid, tanpa teks tambahan, tanpa markdown code block, p
   "gula_g": 0,
   "kolesterol_mg": 0,
   "labels": ["Tinggi Protein"],
+  "insights": [
+    { "issue": "nama masalah gizi singkat, misal Lemak Jenuh Tinggi", "explanation": "penjelasan 1 kalimat kenapa ini terjadi", "tip": "saran singkat cara memperbaikinya" }
+  ],
   "cooking_tips": ["tips singkat cara memasak lebih sehat"]
-}`;
+}
+Kalau menu ini sudah cukup seimbang gizinya, kembalikan "insights" sebagai array kosong [].`;
 };
 
 // Panggil Gemini API - key disimpan di env, tidak pernah dikirim ke client
