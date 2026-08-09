@@ -75,17 +75,21 @@ export async function GET(request) {
 
       // Also search in seller's menu items
       try {
-        const categoriesSnapshot = await db.collection('sellers').doc(sellerId).collection('categories').get();
+        const categories = Array.isArray(sellerData.categories) ? sellerData.categories : [];
         
-        for (const categoryDoc of categoriesSnapshot.docs) {
-          const categoryData = categoryDoc.data();
-          const menuItems = categoryData.items || [];
+        for (const category of categories) {
+          const categoryName = category.name || '';
+          const categoryMatches = categoryName.toLowerCase().includes(searchText);
+          const menuItems = Array.isArray(category.items) ? category.items : [];
 
           for (const item of menuItems) {
-            const itemText = (item.name + ' ' + (item.description || '')).toLowerCase();
+            const itemText = (
+              (item.name || '') + ' ' +
+              (item.description || '') + ' ' +
+              categoryName
+            ).toLowerCase();
             
-            if (itemText.includes(searchText)) {
-              // Add menu item as search result
+            if (itemText.includes(searchText) || categoryMatches) {
               searchResults.push({
                 id: `${sellerId}_${item.id}`,
                 name: item.name,
@@ -96,7 +100,7 @@ export async function GET(request) {
                 sellerId: sellerId,
                 sellerName: seller.name,
                 sellerAddress: seller.address,
-                category: categoryData.name || '',
+                category: categoryName,
                 distance: seller.distance,
               });
             }
