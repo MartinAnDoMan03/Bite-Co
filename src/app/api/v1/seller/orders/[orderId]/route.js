@@ -5,6 +5,7 @@ import { db } from "@/firebase/configure";
 import { verifyToken } from '@/lib/auth';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { createEarningIfCompleted } from '@/lib/sellerEarnings'; 
+import { notifyUser } from '@/lib/notifications';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -80,6 +81,22 @@ export async function PATCH(req, { params }) {
     await createEarningIfCompleted(orderId, orderData, statusProgress);
     // orderData di sini adalah data SEBELUM patch (masih punya status pembayaran asli),
     // yang memang yang kita butuhin buat validasi status === 'success'
+
+    const statusMessages = {
+      processing: 'Pesanan Anda sedang diproses oleh penjual.',
+      delivery: 'Pesanan Anda sedang dalam perjalanan.',
+      completed: 'Pesanan Anda telah selesai. Terima kasih!',
+    };
+    if (statusMessages[statusProgress]) {
+      await notifyUser({
+        userType: 'buyer',
+        userId: orderData.buyerId,
+        type: 'order',
+        title: 'Update Pesanan',
+        message: statusMessages[statusProgress],
+        data: { orderId, status: statusProgress },
+      });
+    }
 
     return withCORSHeaders(NextResponse.json({ 
       success: true, 

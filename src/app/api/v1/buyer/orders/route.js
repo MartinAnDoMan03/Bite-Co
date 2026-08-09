@@ -3,7 +3,7 @@ import { verifyBuyerToken } from '@/middleware/buyerAuth';
 import { db } from '@/firebase/configure';
 import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
-import { sendNotification } from '@/lib/notificationSender';
+import { notifyUser } from '@/lib/notifications';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -236,18 +236,14 @@ export async function POST(request) {
       });
     }
 
-    if (sellerData?.expoPushToken) {
-      try {
-        await sendNotification(
-          sellerData.expoPushToken,
-          'Pesanan Baru!',
-          `Pesanan dari ${fullBuyerData.name || 'Buyer'} telah diterima`,
-          { orderId: orderRef.id, buyerId }
-        );
-      } catch (notifError) {
-        console.error('Error sending notification to seller:', notifError);
-      }
-    }
+    await notifyUser({
+      userType: 'seller',
+      userId: orderData.sellerId,
+      type: 'order',
+      title: 'Pesanan Baru!',
+      message: `Pesanan dari ${fullBuyerData.name || 'Buyer'} telah diterima`,
+      data: { orderId: orderRef.id, buyerId },
+    });
 
     return wrapCORS(createSuccessResponse({
       orderId: orderRef.id,

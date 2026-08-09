@@ -1,23 +1,23 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/firebase/configure';
-import { verifyToken } from '@/lib/auth';
+import { verifyBuyerToken } from '@/lib/auth';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 
 export async function OPTIONS() {
   return handleOptions();
 }
 
-// GET /api/v1/seller/notifications
+// GET /api/v1/buyer/notifications
 export async function GET(request) {
   try {
-    const authResult = verifyToken(request);
+    const authResult = verifyBuyerToken(request);
     if (authResult.error) {
       return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: 401 }));
     }
 
-    const { sellerId } = authResult;
-    if (!sellerId) {
-      return withCORSHeaders(NextResponse.json({ error: "Missing sellerId" }, { status: 400 }));
+    const { buyerId } = authResult;
+    if (!buyerId) {
+      return withCORSHeaders(NextResponse.json({ error: "Missing buyerId" }, { status: 400 }));
     }
 
     const url = new URL(request.url);
@@ -27,7 +27,7 @@ export async function GET(request) {
     const type = url.searchParams.get('type');
 
     let query = db.collection('notifications')
-      .where('sellerId', '==', sellerId)
+      .where('buyerId', '==', buyerId)
       .orderBy('createdAt', 'desc');
 
     if (isRead !== null && isRead !== undefined) {
@@ -60,7 +60,7 @@ export async function GET(request) {
     }));
 
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    console.error('Error fetching buyer notifications:', error);
     return withCORSHeaders(NextResponse.json({
       error: 'Internal server error',
       debug: error.message

@@ -3,6 +3,7 @@ import { createSuccessResponse, createErrorResponse } from '@/lib/auth';
 import { db } from '@/firebase/configure';
 import { verifySellerToken } from '@/middleware/sellerAuth';
 import midtransClient from 'midtrans-client';
+import { notifyUser } from '@/lib/notifications';
 
 export async function POST(request) {
   const reqData = await request.json();
@@ -78,6 +79,15 @@ export async function POST(request) {
         rejectionReason: rejectionReason || 'Rejected by seller',
         updatedAt: new Date().toISOString()
       });
+      
+      await notifyUser({
+        userType: 'buyer',
+        userId: orderData.buyerId,
+        type: 'order',
+        title: 'Pesanan Ditolak',
+        message: rejectionReason || 'Pesanan Anda ditolak oleh penjual.',
+        data: { orderId },
+      });
 
       return withCORSHeaders(createSuccessResponse({
         orderId,
@@ -93,6 +103,15 @@ export async function POST(request) {
           paymentStatus: 'not_required',
           approvedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
+        });
+
+        await notifyUser({
+          userType: 'buyer',
+          userId: orderData.buyerId,
+          type: 'order',
+          title: 'Pesanan Disetujui',
+          message: 'Pesanan Bite Eco Anda telah disetujui dan sedang diproses.',
+          data: { orderId },
         });
 
         return withCORSHeaders(createSuccessResponse({
@@ -142,6 +161,15 @@ export async function POST(request) {
         snapToken: snapResponse.token,
         approvedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      });
+
+      await notifyUser({
+        userType: 'buyer',
+        userId: orderData.buyerId,
+        type: 'order',
+        title: 'Pesanan Disetujui',
+        message: 'Pesanan Anda telah disetujui. Silakan selesaikan pembayaran.',
+        data: { orderId, snapUrl: snapResponse.redirect_url },
       });
 
       return withCORSHeaders(createSuccessResponse({

@@ -2,6 +2,7 @@ import { db } from '@/firebase/configure';
 import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { createEarningIfCompleted } from '@/lib/sellerEarnings';
+import { notifyUser } from '@/lib/notifications';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -81,6 +82,26 @@ export async function POST(req) {
     if (newStatusProgress) updateData.statusProgress = newStatusProgress;
 
     await orderRef.update(updateData);
+
+    if (newStatus === 'success') {
+      await notifyUser({
+        userType: 'buyer',
+        userId: orderData.buyerId,
+        type: 'payment',
+        title: 'Pembayaran Diterima',
+        message: 'Pembayaran Anda telah diterima. Pesanan sedang diproses.',
+        data: { orderId: order_id },
+      });
+    } else if (newStatus === 'failed') {
+      await notifyUser({
+        userType: 'buyer',
+        userId: orderData.buyerId,
+        type: 'payment',
+        title: 'Pembayaran Gagal',
+        message: 'Pembayaran untuk pesanan Anda gagal, dibatalkan, atau kedaluwarsa.',
+        data: { orderId: order_id },
+      });
+    }
 
     // Begitu pembayaran settle/capture, langsung catat earning seller --
     // TIDAK menunggu order sampai statusProgress 'completed'
