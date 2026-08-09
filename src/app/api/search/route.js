@@ -53,7 +53,7 @@ export async function GET(request) {
         id: sellerId,
         name: sellerData.outletName || sellerData.name || '',
         address: sellerData.address || '',
-        rating: sellerData.rating || 4.5,
+        rating: sellerData.rating,
         type: 'seller',
         storeIcon: sellerData.storeIcon || null,
         pinLat: sellerData.pinLat || null,
@@ -100,6 +100,7 @@ export async function GET(request) {
                 sellerId: sellerId,
                 sellerName: seller.name,
                 sellerAddress: seller.address,
+                sellerStoreIcon: seller.storeIcon,
                 category: categoryName,
                 distance: seller.distance,
               });
