@@ -53,13 +53,18 @@ export async function POST(request) {
         }
 
         const newPackage = {
-            id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: body.name,
             description: body.description || "",
             price_per_pax: Number(body.price_per_pax),
             min_pax: Number(body.min_pax),
             event_types: body.event_types || [],
-            slots: body.slots || [],
+            slots: Array.isArray(body.slots) ? body.slots.map(slot => ({
+                label: slot.label || "",
+                category_id: slot.category_id || "",
+                category_name: slot.category_name || "", 
+                max_pick: Number(slot.max_pick) || 1
+            })) : [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
