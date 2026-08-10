@@ -46,6 +46,9 @@ export async function GET(req, context) {
     let categories = [];
     if (Array.isArray(data.categories)) {
       categories = data.categories.map(cat => ({
+        id: cat.id || null, // FIX: id kategori sebelumnya tidak ikut di-mapping,
+                             // menyebabkan matching slot.category_id === cat.id
+                             // di sisi buyer selalu gagal (selalu undefined).
         name: cat.name || '-',
         items: Array.isArray(cat.items) ? cat.items.map(item => ({
           id: item.id || null,
