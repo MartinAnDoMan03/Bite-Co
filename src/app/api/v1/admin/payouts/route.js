@@ -1,10 +1,14 @@
-// GET /api/v1/admin/payouts
-// Rekap semua seller yang punya earning belum dibayar (payoutStatus: pending)
+// GET /api/v1/admin/payouts?status=pending|paid
+// Rekap semua seller yang punya earning dengan payoutStatus tertentu.
+// Default ke 'pending' kalau query param status tidak dikirim, biar
+// pemanggilan lama (tanpa query param) tetap jalan seperti sebelumnya.
 
 import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifyAdminToken } from '@/middleware/adminAuth';
+
+const VALID_STATUSES = ['pending', 'paid'];
 
 export async function OPTIONS() {
   return handleOptions();
@@ -17,9 +21,17 @@ export async function GET(req) {
       return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: authResult.status || 401 }));
     }
 
+    const { searchParams } = new URL(req.url);
+    const statusParam = searchParams.get('status');
+    const payoutStatus = VALID_STATUSES.includes(statusParam) ? statusParam : 'pending';
+
+    // Earning yang sudah lunas diurutkan dari yang paling baru dibayar,
+    // sedangkan yang masih pending diurutkan dari yang paling baru masuk.
+    const dateField = payoutStatus === 'paid' ? 'paidAt' : 'createdAt';
+
     const snapshot = await db.collection('sellerEarnings')
-      .where('payoutStatus', '==', 'pending')
-      .orderBy('createdAt', 'desc')
+      .where('payoutStatus', '==', payoutStatus)
+      .orderBy(dateField, 'desc')
       .get();
 
     const earnings = snapshot.docs.map(doc => ({ earningId: doc.id, ...doc.data() }));
@@ -76,7 +88,7 @@ export async function GET(req) {
 
     const sellers = Object.values(sellerMap).sort((a, b) => b.totalNetAmount - a.totalNetAmount);
 
-    return withCORSHeaders(NextResponse.json({ sellers, grandTotal }));
+    return withCORSHeaders(NextResponse.json({ sellers, grandTotal, payoutStatus }));
 
   } catch (error) {
     console.error('[Admin Payouts GET Error]', error);
