@@ -5,6 +5,11 @@ import { verifySellerToken } from '@/middleware/sellerAuth';
 import midtransClient from 'midtrans-client';
 import { notifyUser } from '@/lib/notifications';
 
+// Toggle sementara selama proses review bisnis Midtrans berjalan.
+// 'midtrans' = flow asli (Snap API). 'manual_qris' = QRIS statis + verifikasi manual admin.
+// Ganti balik ke 'midtrans' di .env begitu akun disetujui — kode Midtrans di bawah TIDAK dihapus.
+const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || 'midtrans';
+
 export async function POST(request) {
   const reqData = await request.json();
   const { orderId, action, rejectionReason } = reqData;
@@ -120,6 +125,34 @@ export async function POST(request) {
           paymentRequired: false
         }));
       }
+
+      // ==== CABANG BARU: manual QRIS (sementara, sambil nunggu Midtrans) ====
+      if (PAYMENT_PROVIDER === 'manual_qris') {
+        await db.collection('orders').doc(orderId).update({
+          statusProgress: 'approved_awaiting_payment',
+          paymentMethod: 'manual_qris',
+          paymentStatus: 'pending_payment',
+          approvedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        await notifyUser({
+          userType: 'buyer',
+          userId: orderData.buyerId,
+          type: 'order',
+          title: 'Pesanan Disetujui',
+          message: 'Pesanan Anda telah disetujui. Silakan lakukan pembayaran via QRIS.',
+          data: { orderId, status: 'approved_awaiting_payment' },
+        });
+
+        return withCORSHeaders(createSuccessResponse({
+          orderId,
+          message: 'Order approved successfully. Manual QRIS payment required.',
+          paymentRequired: true,
+          paymentMethod: 'manual_qris'
+        }));
+      }
+      // ==== akhir cabang baru ====
 
       let isProduction = false;
       let serverKey = process.env.MIDTRANS_SANDBOX_SERVER_KEY;
