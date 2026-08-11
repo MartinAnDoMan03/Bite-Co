@@ -163,3 +163,65 @@ export async function GET(request) {
     );
   }
 }
+
+export async function DELETE(request) {
+  try {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Authentication required or invalid format' }, { status: 401 })
+      );
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      );
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid or expired token', debug: jwtError.message }, { status: 401 })
+      );
+    }
+
+    if (!decoded?.buyerId) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid token payload (missing buyerId)' }, { status: 401 })
+      );
+    }
+
+    try {
+      const userRef = db.collection('buyers').doc(decoded.buyerId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        return withCORSHeaders(
+          NextResponse.json({ error: 'Buyer not found' }, { status: 404 })
+        );
+      }
+
+      await userRef.delete();
+
+      return withCORSHeaders(
+        NextResponse.json({ success: true, message: 'Akun buyer berhasil dihapus' }, { status: 200 })
+      );
+
+    } catch (dbError) {
+      console.error('Database delete failed:', dbError);
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Database delete error', debug: dbError.message }, { status: 500 })
+      );
+    }
+
+  } catch (error) {
+    console.error('Unexpected API error:', error);
+    return withCORSHeaders(
+      NextResponse.json({ error: 'Internal server error', debug: error.message }, { status: 500 })
+    );
+  }
+}

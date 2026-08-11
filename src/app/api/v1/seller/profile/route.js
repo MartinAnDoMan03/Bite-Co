@@ -443,6 +443,76 @@ export async function PUT(request) {
   }
 }
 
+export async function DELETE(request) {
+  try {
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Authentication required or invalid format' }, { status: 401 })
+      );
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      );
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid or expired token', debug: jwtError.message }, { status: 401 })
+      );
+    }
+
+    if (!decoded?.sellerId) {
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Invalid token payload (missing sellerId)' }, { status: 401 })
+      );
+    }
+
+    try {
+      const userRef = db.collection('sellers').doc(decoded.sellerId);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        return withCORSHeaders(
+          NextResponse.json({ error: 'Seller not found' }, { status: 404 })
+        );
+      }
+
+      await userRef.delete();
+
+      try {
+        const bucket = storage.bucket();
+        await bucket.deleteFiles({ prefix: `sellers/${decoded.sellerId}/` });
+        console.log(`Storage files for seller ${decoded.sellerId} deleted successfully.`);
+      } catch (storageError) {
+        console.warn(`Failed to delete storage files or folder is empty for seller ${decoded.sellerId}:`, storageError.message);
+      }
+
+      return withCORSHeaders(
+        NextResponse.json({ success: true, message: 'Akun seller dan file storage berhasil dihapus' }, { status: 200 })
+      );
+
+    } catch (dbError) {
+      console.error('Database/Storage delete failed:', dbError);
+      return withCORSHeaders(
+        NextResponse.json({ error: 'Database delete error', debug: dbError.message }, { status: 500 })
+      );
+    }
+
+  } catch (error) {
+    console.error('Unexpected API error:', error);
+    return withCORSHeaders(
+      NextResponse.json({ error: 'Internal server error', debug: error.message }, { status: 500 })
+    );
+  }
+}
+
 export const config = {
   api: {
     bodyParser: false,
