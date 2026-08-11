@@ -188,36 +188,77 @@
     <div class="section">
         <h2>Account Deletion Request Form</h2>
         <div class="contact-form">
-            <form action="mailto:privacy@biteandco.com" method="post" enctype="text/plain">
-                <div class="form-group">
-                    <label for="email">Email Address (registered with BiteAndCo):</label>
-                    <input type="email" id="email" name="email" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="phone">Phone Number (if registered):</label>
-                    <input type="tel" id="phone" name="phone">
-                </div>
-                
-                <div class="form-group">
-                    <label for="reason">Reason for deletion (optional):</label>
-                    <textarea id="reason" name="reason" placeholder="Please let us know why you're deleting your account so we can improve our service..."></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" required> I understand that this action is permanent and cannot be undone
-                    </label>
-                </div>
-                
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" required> I have read and understand the data deletion policy above
-                    </label>
-                </div>
-                
-                <button type="submit" class="btn-submit">Submit Deletion Request</button>
+             <form id="deletionForm">
+                 <div class="form-group">
+                     <label for="email">Email Address (registered with BiteAndCo):</label>
+                     <input type="email" id="email" name="email" required>
+                 </div>
+                 
+                 <div class="form-group">
+                     <label for="phone">Phone Number (if registered):</label>
+                     <input type="tel" id="phone" name="phone">
+                 </div>
+                 
+                 <div class="form-group">
+                     <label for="reason">Reason for deletion (optional):</label>
+                     <textarea id="reason" name="reason" placeholder="Please let us know why you're deleting your account so we can improve our service..."></textarea>
+                 </div>
+                 
+                 <div class="form-group">
+                     <label>
+                         <input type="checkbox" required> I understand that this action is permanent and cannot be undone
+                     </label>
+                 </div>
+                 
+                 <div class="form-group">
+                     <label>
+                         <input type="checkbox" required> I have read and understand the data deletion policy above
+                     </label>
+                 </div>
+                 
+                <button type="submit" class="btn-submit" id="submitBtn">Submit Deletion Request</button>
+                <p id="formStatus" style="margin-top: 12px; font-weight: 600;"></p>
             </form>
+            <script>
+              document.getElementById('deletionForm').addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const btn = document.getElementById('submitBtn');
+                const status = document.getElementById('formStatus');
+                const email = document.getElementById('email').value;
+                const phone = document.getElementById('phone').value;
+                const reason = document.getElementById('reason').value;
+
+                btn.disabled = true;
+                btn.textContent = 'Submitting...';
+                status.textContent = '';
+
+                try {
+                  const res = await fetch('https://admin.biteandco.id/api/v1/account-deletion-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, phone, reason }),
+                  });
+                  const data = await res.json();
+
+                  if (res.ok && data.success) {
+                    status.style.color = '#0a7d2b';
+                    status.textContent = 'Request received. We will process your deletion within 7 days.';
+                    document.getElementById('deletionForm').reset();
+                    btn.style.display = 'none';
+                  } else {
+                    status.style.color = '#c0392b';
+                    status.textContent = data.message || 'Something went wrong. Please email biteandco2025@gmail.com directly.';
+                    btn.disabled = false;
+                    btn.textContent = 'Submit Deletion Request';
+                  }
+                } catch (err) {
+                  status.style.color = '#c0392b';
+                  status.textContent = 'Could not reach our server. Please email biteandco2025@gmail.com directly.';
+                  btn.disabled = false;
+                  btn.textContent = 'Submit Deletion Request';
+                }
+              });
+            </script>
         </div>
     </div>
 
@@ -225,7 +266,7 @@
         <h2>Alternative Contact Methods</h2>
         <p>If the form above doesn't work, you can also request account deletion by:</p>
         <ul>
-            <li><strong>Email:</strong> Send a request to <a href="mailto:privacy@biteandco.com">privacy@biteandco.com</a></li>
+            <li><strong>Email:</strong> Send a request to <a href="mailto:biteandco2025@gmail.com">biteandco2025@gmail.com</a></li>
             <li><strong>In-App:</strong> Use the "Delete Account" option in your app settings (if available)</li>
             <li><strong>Customer Support:</strong> Contact our support team through the app's help section</li>
         </ul>
@@ -246,7 +287,7 @@
         <h2>Questions About Account Deletion?</h2>
         <p>If you have any questions about the account deletion process, please contact us:</p>
         <p>
-            <strong>Email:</strong> privacy@biteandco.com<br>
+            <strong>Email:</strong> biteandco2025@gmail.com <br>
             <strong>Subject Line:</strong> "Account Deletion Request - [Your Email]"<br>
             <strong>Response Time:</strong> We will respond within 48 hours
         </p>

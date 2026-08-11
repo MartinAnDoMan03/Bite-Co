@@ -183,3 +183,41 @@ export async function sendWelcomeEmail(email, name) {
     return false;
   }
 }
+
+/**
+ * Notify the team when someone requests account deletion
+ * @param {string} email - The requester's registered email
+ * @param {string} phone - The requester's phone (optional)
+ * @param {string} reason - Their stated reason (optional)
+ */
+export async function sendAccountDeletionNotice(email, phone, reason) {
+  try {
+    const mailOptions = {
+      from: {
+        name: 'BiteAndCo System',
+        address: 'no-reply@biteandco.id',
+      },
+      to: 'biteandco2025@gmail.com', // Internal team email for account deletion requests
+      subject: `Account Deletion Request - ${email}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>New Account Deletion Request</h2>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Email</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${email}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Phone</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${phone || '-'}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Reason</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${reason || '-'}</td></tr>
+            <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>Requested at</strong></td><td style="padding: 8px; border: 1px solid #ddd;">${new Date().toISOString()}</td></tr>
+          </table>
+          <p>This request is logged in Firestore under <code>accountDeletionRequests</code>. Please verify the requester's identity before deleting anything.</p>
+        </div>
+      `,
+      text: `New account deletion request\nEmail: ${email}\nPhone: ${phone || '-'}\nReason: ${reason || '-'}\nRequested at: ${new Date().toISOString()}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('Error sending deletion notice email:', error);
+    return false;
+  }
+}
