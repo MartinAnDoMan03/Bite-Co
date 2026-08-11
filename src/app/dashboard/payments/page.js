@@ -2,16 +2,24 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+const TABS = [
+  { key: 'pending', label: 'Menunggu Verifikasi' },
+  { key: 'approved', label: 'Disetujui' },
+  { key: 'rejected', label: 'Ditolak' },
+]
+
 export default function PaymentVerificationPage() {
+  const [activeTab, setActiveTab] = useState('pending')
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [processingId, setProcessingId] = useState(null)
   const [previewImage, setPreviewImage] = useState(null)
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (status) => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/v1/admin/orders/pending-verification', {
+      const res = await fetch(`/api/v1/admin/orders/pending-verification?status=${status}`, {
         method: 'GET',
         credentials: 'include',
       })
@@ -26,9 +34,20 @@ export default function PaymentVerificationPage() {
     }
   }, [])
 
-  useEffect(() => { fetchOrders() }, [fetchOrders])
+  useEffect(() => { fetchOrders(activeTab) }, [activeTab, fetchOrders])
 
   const formatRupiah = (amount) => `Rp ${(amount || 0).toLocaleString('id-ID')}`
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-'
+    try {
+      return new Date(dateStr).toLocaleString('id-ID', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      })
+    } catch {
+      return '-'
+    }
+  }
 
   const handleVerify = async (orderId, action) => {
     const label = action === 'approve' ? 'MENYETUJUI' : 'MENOLAK'
@@ -45,7 +64,9 @@ export default function PaymentVerificationPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal memproses verifikasi')
-      await fetchOrders()
+      // Order yang baru diverifikasi otomatis pindah ke tab Disetujui/Ditolak
+      // dan hilang dari daftar "Menunggu Verifikasi" saat data di-refetch.
+      await fetchOrders(activeTab)
     } catch (err) {
       alert(`Gagal: ${err.message}`)
     } finally {
@@ -67,7 +88,7 @@ export default function PaymentVerificationPage() {
         <p className="text-red-500 font-medium mb-2">Gagal memuat data</p>
         <p className="text-gray-400 text-sm mb-4">{error}</p>
         <button
-          onClick={() => { setLoading(true); fetchOrders() }}
+          onClick={() => fetchOrders(activeTab)}
           className="px-4 py-2 bg-[#711330] text-white text-sm rounded-full hover:opacity-90"
         >
           Coba Lagi
@@ -75,6 +96,8 @@ export default function PaymentVerificationPage() {
       </div>
     )
   }
+
+  const isPendingTab = activeTab === 'pending'
 
   return (
     <div>
@@ -85,9 +108,33 @@ export default function PaymentVerificationPage() {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="mb-6 flex gap-2 border-b border-gray-200">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-[#711330] text-[#711330]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab.label}
+            <span className="ml-1.5 bg-gray-100 text-gray-500 py-0.5 px-1.5 rounded-full text-xs">
+              {orders.length !== undefined && activeTab === tab.key ? orders.length : ''}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {orders.length === 0 ? (
         <div className="bg-white p-10 rounded-lg shadow text-center">
-          <p className="text-gray-400">Tidak ada pembayaran yang menunggu verifikasi.</p>
+          <p className="text-gray-400">
+            {activeTab === 'pending' && 'Tidak ada pembayaran yang menunggu verifikasi.'}
+            {activeTab === 'approved' && 'Belum ada pembayaran yang disetujui.'}
+            {activeTab === 'rejected' && 'Belum ada pembayaran yang ditolak.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -111,22 +158,32 @@ export default function PaymentVerificationPage() {
                 />
               )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleVerify(order.id, 'approve')}
-                  disabled={processingId === order.id}
-                  className="flex-1 px-3 py-2 bg-[#711330] text-white text-sm rounded-full hover:opacity-90 disabled:opacity-40"
+              {isPendingTab ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleVerify(order.id, 'approve')}
+                    disabled={processingId === order.id}
+                    className="flex-1 px-3 py-2 bg-[#711330] text-white text-sm rounded-full hover:opacity-90 disabled:opacity-40"
+                  >
+                    {processingId === order.id ? '...' : 'Setujui'}
+                  </button>
+                  <button
+                    onClick={() => handleVerify(order.id, 'reject')}
+                    disabled={processingId === order.id}
+                    className="flex-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-full hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    {processingId === order.id ? '...' : 'Tolak'}
+                  </button>
+                </div>
+              ) : (
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                    activeTab === 'approved' ? 'bg-green-50 text-green-700' : 'bg-rose-50 text-rose-700'
+                  }`}
                 >
-                  {processingId === order.id ? '...' : 'Setujui'}
-                </button>
-                <button
-                  onClick={() => handleVerify(order.id, 'reject')}
-                  disabled={processingId === order.id}
-                  className="flex-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-full hover:bg-gray-50 disabled:opacity-40"
-                >
-                  {processingId === order.id ? '...' : 'Tolak'}
-                </button>
-              </div>
+                  {activeTab === 'approved' ? '✓ Disetujui' : '✕ Ditolak'} · {formatDate(order.verifiedAt)}
+                </span>
+              )}
             </div>
           ))}
         </div>
