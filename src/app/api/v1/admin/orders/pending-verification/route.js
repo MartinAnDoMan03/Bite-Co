@@ -10,9 +10,9 @@ export async function OPTIONS() {
 
 export async function GET(req) {
   try {
-    const authResult = await verifyAdminToken(req);
+    const authResult = verifyAdminToken(req);
     if (authResult.error) {
-      return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: 401 }));
+      return withCORSHeaders(NextResponse.json({ error: authResult.error }, { status: authResult.status || 401 }));
     }
 
     const snapshot = await db.collection("orders")
