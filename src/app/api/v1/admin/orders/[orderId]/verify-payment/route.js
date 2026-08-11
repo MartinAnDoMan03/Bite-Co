@@ -3,6 +3,7 @@ import { db } from "@/firebase/configure";
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifyAdminToken } from '@/middleware/adminAuth';
 import { notifyUser } from '@/lib/notifications';
+import { createEarningIfCompleted } from '@/lib/sellerEarnings';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -41,7 +42,10 @@ export async function POST(req, { params }) {
         paymentVerifiedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-
+            // Trigger pembuatan earning di sini, karena manual QRIS ga punya webhook
+    // Midtrans yang biasanya melakukan ini. orderData yang dioper harus
+    // sudah punya sellerId & totalAmount (sudah ada dari order asli).
+    await createEarningIfCompleted(orderId, orderData, 'success');
       await notifyUser({
         userType: 'buyer',
         userId: orderData.buyerId,
