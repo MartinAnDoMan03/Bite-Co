@@ -46,9 +46,16 @@ export async function PATCH(request, { params }) {
       return withCORSHeaders(createErrorResponse('You can only cancel your own orders', 403));
     }
 
-    // Status transition check — cuma boleh cancel selama masih nunggu approval seller.
-    // Kalau seller sudah approve (atau order sudah dalam status lain), tolak.
-    if (orderData.statusProgress !== 'awaiting_seller_approval') {
+    // Status transition check — izinkan batal jika masih nunggu approval, 
+    // ATAU jika statusnya nunggu pembayaran tapi sudah lewat dari 24 jam.
+    const nowTs = Date.now();
+    const createdTs = new Date(orderData.createdAt).getTime();
+    const elapsedHours = (nowTs - createdTs) / (1000 * 60 * 60);
+
+    const isAwaitingApproval = orderData.statusProgress === 'awaiting_seller_approval';
+    const isPaymentExpired = orderData.statusProgress === 'approved_awaiting_payment' && elapsedHours >= 24;
+
+    if (!isAwaitingApproval && !isPaymentExpired) {
       return withCORSHeaders(
         createErrorResponse(
           `Order cannot be cancelled — current status is '${orderData.statusProgress}'`,

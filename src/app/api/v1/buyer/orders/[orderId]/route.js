@@ -47,7 +47,7 @@ export async function GET(request, { params }) {
       );
     }
 
-    const orderData = orderDoc.data();
+    let orderData = orderDoc.data();
     
     // Check if order belongs to the buyer
     if (orderData.buyerId !== buyerId) {
@@ -55,6 +55,47 @@ export async function GET(request, { params }) {
         NextResponse.json({ error: "Unauthorized - Order does not belong to this buyer" }, { status: 403 })
       );
     }
+
+    // ==========================================
+    // LOGIKA AUTO-CANCEL (LAZY EVALUATION)
+    // ==========================================
+    let isModified = false;
+    const nowTs = Date.now();
+    const createdTs = new Date(orderData.createdAt).getTime();
+
+    if (!isNaN(createdTs)) {
+
+      if (orderData.statusProgress === 'approved_awaiting_payment') {
+        const elapsedHours = (nowTs - createdTs) / (1000 * 60 * 60);
+        if (elapsedHours >= 24) {
+          orderData.statusProgress = 'cancelled';
+          orderData.status = 'cancelled'; // Update legacy status jika masih dipakai
+          orderData.cancelReason = 'Dibatalkan sistem: Pembayaran melewati batas waktu 24 jam';
+          isModified = true;
+        }
+      } 
+
+      else if (orderData.statusProgress === 'awaiting_seller_approval') {
+        const elapsedMinutes = (nowTs - createdTs) / (1000 * 60);
+        if (elapsedMinutes >= 30) {
+          orderData.statusProgress = 'cancelled';
+          orderData.status = 'cancelled'; // Update legacy status jika masih dipakai
+          orderData.cancelReason = 'Dibatalkan sistem: Penjual tidak merespon dalam 30 menit';
+          isModified = true;
+        }
+      }
+    }
+
+    if (isModified) {
+      orderData.updatedAt = new Date().toISOString();
+      await db.collection("orders").doc(orderId).update({
+        statusProgress: orderData.statusProgress,
+        status: orderData.status,
+        cancelReason: orderData.cancelReason,
+        updatedAt: orderData.updatedAt
+      });
+    }
+    // ==========================================
 
     const order = { id: orderDoc.id, ...orderData };
     

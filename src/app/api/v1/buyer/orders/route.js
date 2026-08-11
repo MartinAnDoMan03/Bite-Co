@@ -54,26 +54,80 @@ export async function GET(request) {
     console.log('[FIRESTORE QUERY] buyerId ==', buyerId, 'orderBy createdAt desc');
 
     const orders = [];
+    const nowTs = Date.now(); // Ambil waktu sekarang untuk perbandingan
+
     for (const doc of ordersSnapshot.docs) {
-      const order = { id: doc.id, ...doc.data() };
-      if (order.snapToken) {
-        try {
-          let isProduction = false;
-          let serverKey = process.env.MIDTRANS_SANDBOX_SERVER_KEY;
-          if (process.env.MIDTRANS_MODE === 'production') {
-            isProduction = true;
-            serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY;
+      let order = { id: doc.id, ...doc.data() };
+      let isModified = false;
+
+      // ==========================================
+      // 1. LOGIKA AUTO-CANCEL (LAZY EVALUATION)
+      // ==========================================
+      const createdTs = new Date(order.createdAt).getTime();
+
+      if (!isNaN(createdTs)) {
+        if (order.statusProgress === 'approved_awaiting_payment') {
+          const elapsedHours = (nowTs - createdTs) / (1000 * 60 * 60);
+          if (elapsedHours >= 24) {
+            order.statusProgress = 'cancelled';
+            order.status = 'cancelled';
+            order.cancelReason = 'Dibatalkan sistem: Pembayaran melewati batas waktu 24 jam';
+            isModified = true;
           }
-          let snap = new midtransClient.Snap({ isProduction, serverKey });
-          const status = await snap.transaction.status(order.id);
-          order.paymentStatus = status.transaction_status;
-        } catch (err) {
-          order.paymentStatus = 'unknown';
+        } 
+
+        else if (order.statusProgress === 'awaiting_seller_approval') {
+          const elapsedMinutes = (nowTs - createdTs) / (1000 * 60);
+          if (elapsedMinutes >= 30) {
+            order.statusProgress = 'cancelled';
+            order.status = 'cancelled';
+            order.cancelReason = 'Dibatalkan sistem: Penjual tidak merespon dalam 30 menit';
+            isModified = true;
+          }
         }
-      } else {
-        order.paymentStatus = order.status || 'pending';
       }
 
+
+      if (isModified) {
+        order.updatedAt = new Date().toISOString();
+        db.collection("orders").doc(order.id).update({
+          statusProgress: order.statusProgress,
+          status: order.status,
+          cancelReason: order.cancelReason,
+          updatedAt: order.updatedAt
+        }).catch(err => console.error("Error auto-canceling order:", err));
+      }
+
+
+      // ==========================================
+      // 2. CEK STATUS MIDTRANS (Hanya jika belum batal)
+      // ==========================================
+      if (!isModified) {
+        if (order.snapToken) {
+          try {
+            let isProduction = false;
+            let serverKey = process.env.MIDTRANS_SANDBOX_SERVER_KEY;
+            if (process.env.MIDTRANS_MODE === 'production') {
+              isProduction = true;
+              serverKey = process.env.MIDTRANS_PRODUCTION_SERVER_KEY;
+            }
+            let snap = new midtransClient.Snap({ isProduction, serverKey });
+            const status = await snap.transaction.status(order.id);
+            order.paymentStatus = status.transaction_status;
+          } catch (err) {
+            order.paymentStatus = 'unknown';
+          }
+        } else {
+          order.paymentStatus = order.status || 'pending';
+        }
+      } else {
+        // Jika statusnya sudah diubah jadi cancelled oleh Auto-Cancel di atas
+        order.paymentStatus = 'expire'; 
+      }
+
+      // ==========================================
+      // 3. MAPPING STATUS PROGRESS LAMA (Legacy)
+      // ==========================================
       let statusProgress = order.statusProgress;
       if (!statusProgress) {
         if (order.status === 'pending' || order.paymentStatus === 'pending') {
@@ -110,6 +164,7 @@ export async function GET(request) {
           statusProgress = 'waiting_approval';
         }
       }
+      
       order.statusProgress = statusProgress;
       orders.push(order);
     }
