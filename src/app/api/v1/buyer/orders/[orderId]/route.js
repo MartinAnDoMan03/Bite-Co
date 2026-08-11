@@ -77,10 +77,10 @@ export async function GET(request, { params }) {
 
       else if (orderData.statusProgress === 'awaiting_seller_approval') {
         const elapsedMinutes = (nowTs - createdTs) / (1000 * 60);
-        if (elapsedMinutes >= 30) {
+        if (elapsedMinutes >= 60) {
           orderData.statusProgress = 'cancelled';
           orderData.status = 'cancelled'; // Update legacy status jika masih dipakai
-          orderData.cancelReason = 'Dibatalkan sistem: Penjual tidak merespon dalam 30 menit';
+          orderData.cancelReason = 'Dibatalkan sistem: Penjual tidak merespon dalam 1 jam';
           isModified = true;
         }
       }
