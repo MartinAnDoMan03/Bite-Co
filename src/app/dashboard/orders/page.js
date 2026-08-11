@@ -7,12 +7,18 @@ import { safeToISOString } from '../../../lib/dateUtils'
 
 // Map payment status and delivery status to display status
 const mapStatusToDisplayStatus = (paymentStatus, deliveryStatus) => {
+  // Seller explicitly rejected the order during approval review
+  if (deliveryStatus === 'rejected') {
+    return 'rejected'
+  }
   if (paymentStatus === 'failed' || deliveryStatus === 'cancelled') {
     return 'cancelled'
   }
   if (paymentStatus === 'success') {
     if (deliveryStatus === 'completed') {
       return 'delivered'
+    } else if (deliveryStatus === 'approved') {
+      return 'approved'
     } else if (deliveryStatus === 'in_progress' || deliveryStatus === 'preparing' || deliveryStatus === 'processing') {
       return 'confirmed'
     } else if (deliveryStatus === 'awaiting_seller_approval') {
@@ -27,7 +33,7 @@ const mapStatusToDisplayStatus = (paymentStatus, deliveryStatus) => {
 export default function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all') // all, pending, awaiting_approval, confirmed, delivered, cancelled
+  const [filter, setFilter] = useState('all') // all, pending, awaiting_approval, approved, rejected, confirmed, delivered, cancelled
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState(null)
   const [updatingOrder, setUpdatingOrder] = useState(null) // Track which order is being updated
@@ -98,6 +104,7 @@ export default function OrdersPage() {
                 paymentMethod: orderData.paymentType || orderData.paymentMethod || 'Unknown',
                 deliveryAddress: orderData.deliveryAddress || orderData.address || 'Unknown Address',
                 cancelReason: orderData.cancelReason || null,
+                rejectReason: orderData.rejectReason || null,
                 pax: orderPax,
                 distance: orderData.distance || 0,
                 rawData: orderData // Keep raw data for debugging
@@ -155,9 +162,15 @@ export default function OrdersPage() {
           break
         case 'approved':
           updateData.status = 'success'
-          updateData.statusProgress = 'processing' // Now move to processing after approval
+          updateData.statusProgress = 'approved' // Stays in its own "Disetujui" bucket, doesn't jump to confirmed/processing
           updateData.approvedAt = new Date()
-          console.log('Seller approved order, moving to processing:', orderId)
+          console.log('Seller approved order:', orderId)
+          break
+        case 'rejected':
+          updateData.status = 'failed'
+          updateData.statusProgress = 'rejected' // Stays in its own "Ditolak" bucket, separate from admin-cancelled
+          updateData.rejectedAt = new Date()
+          console.log('Seller rejected order:', orderId)
           break
         case 'delivered':
           updateData.status = 'success'
@@ -190,7 +203,9 @@ export default function OrdersPage() {
       } else if (newStatus === 'awaiting_approval') {
         successMessage = `Order ${orderId} is now awaiting seller approval.`
       } else if (newStatus === 'approved') {
-        successMessage = `Order ${orderId} has been approved and is now processing.`
+        successMessage = `Order ${orderId} has been approved (Disetujui).`
+      } else if (newStatus === 'rejected') {
+        successMessage = `Order ${orderId} has been rejected (Ditolak).`
       } else if (newStatus === 'delivered') {
         successMessage = `Order ${orderId} has been marked as delivered.`
       } else if (newStatus === 'cancelled') {
@@ -222,6 +237,10 @@ export default function OrdersPage() {
     switch (status) {
       case 'awaiting_approval':
         return 'Awaiting Approval'
+      case 'approved':
+        return 'Approved'
+      case 'rejected':
+        return 'Rejected'
       default:
         return status.charAt(0).toUpperCase() + status.slice(1)
     }
@@ -234,6 +253,10 @@ export default function OrdersPage() {
         return `${baseClasses} bg-yellow-600 text-white`
       case 'awaiting_approval':
         return `${baseClasses} bg-orange-600 text-white`
+      case 'approved':
+        return `${baseClasses} bg-emerald-600 text-white`
+      case 'rejected':
+        return `${baseClasses} bg-rose-700 text-white`
       case 'confirmed':
         return `${baseClasses} bg-blue-600 text-white`
       case 'delivered':
@@ -257,6 +280,18 @@ export default function OrdersPage() {
         return (
           <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
+          </svg>
+        )
+      case 'approved':
+        return (
+          <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd"/>
+          </svg>
+        )
+      case 'rejected':
+        return (
+          <svg className="w-4 h-4 text-rose-600" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
           </svg>
         )
       case 'confirmed': 
@@ -346,6 +381,12 @@ export default function OrdersPage() {
                 <div>
                   <span className="text-sm text-gray-500">Cancel Reason:</span>
                   <span className="ml-2 text-sm text-red-600">{order.cancelReason}</span>
+                </div>
+              )}
+              {order.rejectReason && (
+                <div>
+                  <span className="text-sm text-gray-500">Reject Reason:</span>
+                  <span className="ml-2 text-sm text-rose-600">{order.rejectReason}</span>
                 </div>
               )}
             </div>
@@ -441,7 +482,7 @@ export default function OrdersPage() {
           {order.status === 'awaiting_approval' && (
             <div className="flex space-x-2">
               <button
-                onClick={() => handleStatusChange(order.id, 'cancelled')}
+                onClick={() => handleStatusChange(order.id, 'rejected')}
                 disabled={updatingOrder === order.id}
                 className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -449,7 +490,7 @@ export default function OrdersPage() {
                   <>
                     <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-gray-700" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Rejecting...
                   </>
@@ -466,7 +507,7 @@ export default function OrdersPage() {
                   <>
                     <svg className="animate-spin -ml-1 mr-1 h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Approving...
                   </>
@@ -476,7 +517,7 @@ export default function OrdersPage() {
               </button>
             </div>
           )}
-          {order.status === 'confirmed' && (
+          {(order.status === 'approved' || order.status === 'confirmed') && (
             <button
               onClick={() => handleStatusChange(order.id, 'delivered')}
               disabled={updatingOrder === order.id}
@@ -547,8 +588,8 @@ export default function OrdersPage() {
 
       {/* Filters and Search */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0 sm:space-x-4">
-        <div className="flex space-x-2">
-          {['all', 'pending', 'awaiting_approval', 'confirmed', 'delivered', 'cancelled'].map((status) => (
+        <div className="flex flex-wrap gap-2">
+          {['all', 'pending', 'awaiting_approval', 'approved', 'rejected', 'confirmed', 'delivered', 'cancelled'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}

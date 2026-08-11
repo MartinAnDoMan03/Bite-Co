@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 export default function PayoutPage() {
+  const [activeTab, setActiveTab] = useState('pending') // 'pending' | 'paid'
   const [sellers, setSellers] = useState([])
   const [grandTotal, setGrandTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -10,9 +11,10 @@ export default function PayoutPage() {
   const [expandedSeller, setExpandedSeller] = useState(null)
   const [markingPaidId, setMarkingPaidId] = useState(null) // sekarang nyimpen earningId, bukan sellerId
 
-  const fetchPayouts = useCallback(async () => {
+  const fetchPayouts = useCallback(async (status) => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/v1/admin/payouts', {
+      const res = await fetch(`/api/v1/admin/payouts?status=${status}`, {
         method: 'GET',
         credentials: 'include',
       })
@@ -31,10 +33,22 @@ export default function PayoutPage() {
   }, [])
 
   useEffect(() => {
-    fetchPayouts()
-  }, [fetchPayouts])
+    fetchPayouts(activeTab)
+    setExpandedSeller(null) // reset expand state pas ganti tab biar ga bingung
+  }, [activeTab, fetchPayouts])
 
   const formatRupiah = (amount) => `Rp ${amount.toLocaleString('id-ID')}`
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-'
+    try {
+      return new Date(dateStr).toLocaleString('id-ID', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      })
+    } catch {
+      return '-'
+    }
+  }
 
   // Tandai lunas SATU order/earning saja, bukan semua earning milik seller
   const handleMarkPaid = async (earningId, orderIdShort, sellerName) => {
@@ -53,7 +67,9 @@ export default function PayoutPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal menandai lunas')
 
-      await fetchPayouts()
+      // Earning yang barusan ditandai lunas otomatis pindah ke tab "Sudah Dibayar"
+      // dan hilang dari daftar pending saat data di-refetch.
+      await fetchPayouts(activeTab)
     } catch (err) {
       alert(`Gagal: ${err.message}`)
     } finally {
@@ -75,7 +91,7 @@ export default function PayoutPage() {
         <p className="text-red-500 font-medium mb-2">Gagal memuat data payout</p>
         <p className="text-gray-400 text-sm mb-4">{error}</p>
         <button
-          onClick={() => { setLoading(true); fetchPayouts() }}
+          onClick={() => fetchPayouts(activeTab)}
           className="px-4 py-2 bg-[#711330] text-white text-sm rounded-full hover:opacity-90"
         >
           Coba Lagi
@@ -84,29 +100,63 @@ export default function PayoutPage() {
     )
   }
 
+  const isPaidTab = activeTab === 'paid'
+
   return (
     <div>
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Payout Seller</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Rekap pendapatan seller yang belum dicairkan.
+          Rekap pendapatan seller yang belum dan sudah dicairkan.
         </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6 flex gap-2 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'pending'
+              ? 'border-[#711330] text-[#711330]'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Belum Dibayar
+        </button>
+        <button
+          onClick={() => setActiveTab('paid')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'paid'
+              ? 'border-[#711330] text-[#711330]'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Sudah Dibayar
+        </button>
       </div>
 
       {/* Ringkasan total */}
       <div className="bg-white overflow-hidden shadow rounded-lg mb-8">
         <div className="p-6">
-          <p className="text-sm font-medium text-gray-500">Total Harus Dibayar (semua seller)</p>
-          <p className="text-3xl font-bold text-[#711330] mt-1">{formatRupiah(grandTotal)}</p>
-          <p className="text-sm text-gray-400 mt-1">{sellers.length} seller menunggu pembayaran</p>
+          <p className="text-sm font-medium text-gray-500">
+            {isPaidTab ? 'Total Sudah Dicairkan' : 'Total Harus Dibayar (semua seller)'}
+          </p>
+          <p className={`text-3xl font-bold mt-1 ${isPaidTab ? 'text-green-600' : 'text-[#711330]'}`}>
+            {formatRupiah(grandTotal)}
+          </p>
+          <p className="text-sm text-gray-400 mt-1">
+            {sellers.length} seller {isPaidTab ? 'sudah menerima pembayaran' : 'menunggu pembayaran'}
+          </p>
         </div>
       </div>
 
       {/* Tabel rekap per seller */}
       {sellers.length === 0 ? (
         <div className="bg-white p-10 rounded-lg shadow text-center">
-          <p className="text-gray-400">Belum ada earning yang pending saat ini.</p>
+          <p className="text-gray-400">
+            {isPaidTab ? 'Belum ada earning yang sudah dibayar.' : 'Belum ada earning yang pending saat ini.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -116,7 +166,9 @@ export default function PayoutPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rekening Tujuan</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jumlah Order</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Pending</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {isPaidTab ? 'Total Dicairkan' : 'Total Pending'}
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -157,7 +209,7 @@ export default function PayoutPage() {
                   {expandedSeller === seller.sellerId && (
                     <tr>
                       <td colSpan={4} className="bg-gray-50 px-6 py-4">
-                        {!seller.hasBankInfo && (
+                        {!isPaidTab && !seller.hasBankInfo && (
                           <p className="text-xs text-amber-700 mb-3">
                             ⚠ Lengkapi data rekening seller ini dulu sebelum menandai order manapun lunas.
                           </p>
@@ -170,7 +222,9 @@ export default function PayoutPage() {
                               <th className="text-left py-2">Gross</th>
                               <th className="text-left py-2">Fee ({seller.earnings[0]?.platformFeePercent}%)</th>
                               <th className="text-left py-2">Net</th>
-                              <th className="text-right py-2">Aksi</th>
+                              <th className="text-right py-2">
+                                {isPaidTab ? 'Dibayar Pada' : 'Aksi'}
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -188,14 +242,20 @@ export default function PayoutPage() {
                                     {formatRupiah(e.netAmount)}
                                   </td>
                                   <td className="py-2 text-right">
-                                    <button
-                                      onClick={() => handleMarkPaid(e.earningId, shortId, seller.sellerName)}
-                                      disabled={markingPaidId === e.earningId || !seller.hasBankInfo}
-                                      title={!seller.hasBankInfo ? 'Lengkapi data rekening seller ini terlebih dahulu' : undefined}
-                                      className="px-3 py-1 bg-[#711330] text-white text-xs rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >
-                                      {markingPaidId === e.earningId ? '...' : 'Tandai Lunas'}
-                                    </button>
+                                    {isPaidTab ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                                        ✓ {formatDate(e.paidAt)}
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleMarkPaid(e.earningId, shortId, seller.sellerName)}
+                                        disabled={markingPaidId === e.earningId || !seller.hasBankInfo}
+                                        title={!seller.hasBankInfo ? 'Lengkapi data rekening seller ini terlebih dahulu' : undefined}
+                                        className="px-3 py-1 bg-[#711330] text-white text-xs rounded-full hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        {markingPaidId === e.earningId ? '...' : 'Tandai Lunas'}
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               )
