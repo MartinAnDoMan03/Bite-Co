@@ -86,7 +86,7 @@ export async function POST(request) {
         type: 'order',
         title: 'Pesanan Ditolak',
         message: rejectionReason || 'Pesanan Anda ditolak oleh penjual.',
-        data: { orderId },
+        data: { orderId, status: 'cancelled' },
       });
 
       return withCORSHeaders(createSuccessResponse({
@@ -111,7 +111,7 @@ export async function POST(request) {
           type: 'order',
           title: 'Pesanan Disetujui',
           message: 'Pesanan Bite Eco Anda telah disetujui dan sedang diproses.',
-          data: { orderId },
+          data: { orderId, status: 'processing' },
         });
 
         return withCORSHeaders(createSuccessResponse({
@@ -169,7 +169,7 @@ export async function POST(request) {
         type: 'order',
         title: 'Pesanan Disetujui',
         message: 'Pesanan Anda telah disetujui. Silakan selesaikan pembayaran.',
-        data: { orderId, snapUrl: snapResponse.redirect_url },
+        data: { orderId, snapUrl: snapResponse.redirect_url, status: 'approved_awaiting_payment' },
       });
 
       return withCORSHeaders(createSuccessResponse({

@@ -296,8 +296,8 @@ export async function POST(request) {
       userId: orderData.sellerId,
       type: 'order',
       title: 'Pesanan Baru!',
-      message: `Pesanan dari ${fullBuyerData.name || 'Buyer'} telah diterima`,
-      data: { orderId: orderRef.id, buyerId },
+      message: `Pesanan baru dari ${fullBuyerData.name || 'Buyer'} menunggu persetujuan Anda.`,
+      data: { orderId: orderRef.id, buyerId, status: 'awaiting_seller_approval' },
     });
 
     return wrapCORS(createSuccessResponse({

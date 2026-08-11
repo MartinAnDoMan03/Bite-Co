@@ -8,10 +8,9 @@ export async function OPTIONS() {
 }
 
 // PATCH /api/buyer/orders/[orderId]/cancel
-// Khusus buat buyer membatalkan order sendiri. Cuma boleh selama order
-// masih 'awaiting_seller_approval' (jendela batal 15 detik / sebelum
-// seller approve). Setelah seller approve, buyer TIDAK bisa cancel lewat
-// endpoint ini — itu kasus lain (butuh alur refund, di luar scope ini).
+// Khusus buat buyer membatalkan order sendiri. Cuma boleh membatalkan jika:
+// 1. Order masih 'awaiting_seller_approval' (sebelum penjual setuju / batas 1 jam).
+// 2. Order 'approved_awaiting_payment' TAPI sudah kadaluarsa (lewat 24 jam).
 export async function PATCH(request, { params }) {
   const { orderId } = params;
 

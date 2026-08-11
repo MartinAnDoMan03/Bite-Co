@@ -90,7 +90,7 @@ export async function POST(req) {
         type: 'payment',
         title: 'Pembayaran Diterima',
         message: 'Pembayaran Anda telah diterima. Pesanan sedang diproses.',
-        data: { orderId: order_id },
+        data: { orderId: order_id, status: 'processing' },
       });
     } else if (newStatus === 'failed') {
       await notifyUser({
@@ -99,7 +99,7 @@ export async function POST(req) {
         type: 'payment',
         title: 'Pembayaran Gagal',
         message: 'Pembayaran untuk pesanan Anda gagal, dibatalkan, atau kedaluwarsa.',
-        data: { orderId: order_id },
+        data: { orderId: order_id, status: 'cancelled' },
       });
     }
 
