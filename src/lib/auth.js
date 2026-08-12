@@ -15,7 +15,7 @@ try {
 // Default admin credentials
 const DEFAULT_ADMIN = {
   email: 'admin@biteandco.com',
-  password: 'admin123',
+  password: 'bite011004',
   username: 'admin',
   role: 'admin'
 }
@@ -45,7 +45,7 @@ export const adminLogin = async (username, password) => {
 
     return {
       success: false,
-      error: 'Invalid credentials. Use username: admin, password: admin123'
+      error: 'Invalid credentials.'
     }
   } catch (error) {
     console.error('Login error:', error)
