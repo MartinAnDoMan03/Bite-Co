@@ -103,7 +103,7 @@ export async function GET(request) {
       // 2. CEK STATUS MIDTRANS (Hanya jika belum batal)
       // ==========================================
       if (!isModified) {
-        if (order.snapToken) {
+        if (order.paymentMethod !== 'manual_qris' && order.snapToken) {
           try {
             let isProduction = false;
             let serverKey = process.env.MIDTRANS_SANDBOX_SERVER_KEY;
@@ -115,15 +115,15 @@ export async function GET(request) {
             const status = await snap.transaction.status(order.id);
             order.paymentStatus = status.transaction_status;
           } catch (err) {
-            order.paymentStatus = 'unknown';
+            order.paymentStatus = order.paymentStatus || 'unknown';
           }
-        } else {
-          order.paymentStatus = order.status || 'pending';
+        } else if (!order.paymentStatus) {
+        order.paymentStatus = order.status || 'pending';
         }
       } else {
-        // Jika statusnya sudah diubah jadi cancelled oleh Auto-Cancel di atas
         order.paymentStatus = 'expire'; 
       }
+      
 
       // ==========================================
       // 3. MAPPING STATUS PROGRESS LAMA (Legacy)
