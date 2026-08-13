@@ -4,7 +4,7 @@ export const config = {
   // App Information
   appName: "Bite&Co",
   appDescription: "Your Ultimate Food Ordering & Catering Platform",
-  appVersion: "1.0.0",
+  appVersion: "1.1.2",
   
   // Brand Colors
   colors: {
@@ -22,8 +22,8 @@ export const config = {
   // App Store Links
   appStore: {
     android: "https://play.google.com/store/apps/details?id=com.biteandco.app",
-    ios: "https://apps.apple.com/app/bite-co/id1234567890", // Placeholder
-    webApp: "https://app.biteandco.id"
+    ios: "https://biteandco.id", // Web untuk sementara sebelum versi ios rilis
+    webApp: "https://biteandco.id"
   },
   
   // Contact Information
