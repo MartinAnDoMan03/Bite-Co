@@ -77,7 +77,8 @@ export async function GET(req) {
         pinLng: data.pinLng || null,
         pinAddress: data.pinAddress || null,
         distance: distance,
-        categories: data.categories || [], // Add categories data to the response
+        categories: data.categories || [], 
+        cateringPackages: data.cateringPackages || [], 
         // Operating hours / status fields for buyer-side open/closed badge
         openTime: data.openTime || null,
         closeTime: data.closeTime || null,
