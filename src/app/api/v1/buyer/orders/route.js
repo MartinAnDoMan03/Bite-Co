@@ -219,6 +219,24 @@ export async function POST(request) {
       return wrapCORS(createErrorResponse('Total amount cannot be negative', 400));
     }
 
+    // Minimal H-1
+    const isCateringOrder = (orderData.orderType || '').includes('Catering');
+    if (isCateringOrder) {
+      if (!orderData.eventDateTime) {
+        return wrapCORS(createErrorResponse('Tanggal & waktu pengantaran wajib diisi untuk pesanan Catering', 400));
+      }
+      const eventDate = new Date(orderData.eventDateTime);
+      if (isNaN(eventDate.getTime())) {
+        return wrapCORS(createErrorResponse('Tanggal & waktu pengantaran tidak valid', 400));
+      }
+      const minAllowed = new Date();
+      minAllowed.setDate(minAllowed.getDate() + 1);
+      minAllowed.setHours(0, 0, 0, 0);
+      if (eventDate < minAllowed) {
+        return wrapCORS(createErrorResponse('Tanggal pengantaran minimal H-1 (besok atau setelahnya)', 400));
+      }
+    }
+
     let sellerData = null;
     let sellerLat = orderData.sellerLat || null;
     let sellerLng = orderData.sellerLng || null;
@@ -266,6 +284,7 @@ export async function POST(request) {
       startDate: orderData.startDate || null,
       endDate: orderData.endDate || null,
       packageType: orderData.packageType || null,
+      eventDateTime: isCateringOrder ? orderData.eventDateTime : null,
       buyerLat: orderData.buyerLat || null,
       buyerLng: orderData.buyerLng || null,
       sellerLat: sellerLat,
