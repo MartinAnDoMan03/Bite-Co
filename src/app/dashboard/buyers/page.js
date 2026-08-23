@@ -7,11 +7,15 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { safeToDateString } from '../../../lib/dateUtils'
 
 export default function BuyersPage() {
-  const [buyers, setBuyers] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [rawBuyers, setRawBuyers] = useState([])
+  const [orders, setOrders] = useState([])
+  const [loadingBuyers, setLoadingBuyers] = useState(true)
+  const [loadingOrders, setLoadingOrders] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState('joinDate') // joinDate, totalOrders, totalSpent
   const [error, setError] = useState(null)
+
+  const loading = loadingBuyers || loadingOrders
 
   useEffect(() => {
     const setupRealtimeBuyers = () => {
@@ -33,9 +37,6 @@ export default function BuyersPage() {
                 email: buyerData.email || '',
                 phone: buyerData.phone || buyerData.phoneNumber || '',
                 joinDate: safeToDateString(buyerData.createdAt),
-                totalOrders: 0, // Will be calculated from orders
-                totalSpent: 0, // Will be calculated from successful orders
-                lastOrderDate: null, // Will be calculated from orders
                 favoriteCategories: buyerData.favoriteCategories || [],
                 location: buyerData.address?.city || buyerData.location || 'Unknown',
                 status: buyerData.isActive !== false ? 'active' : 'inactive',
@@ -46,15 +47,15 @@ export default function BuyersPage() {
             })
             
             // console.log('Found buyers:', buyersData.length)
-            setBuyers(buyersData)
-            setLoading(false)
+            setRawBuyers(buyersData)
+            setLoadingBuyers(false)
             setError(null)
           },
           (error) => {
             console.error('Error fetching buyers:', error)
             setError('Failed to load buyers data')
-            setLoading(false)
-            setBuyers([])
+            setLoadingBuyers(false)
+            setRawBuyers([])
           }
         )
         
@@ -62,7 +63,7 @@ export default function BuyersPage() {
       } catch (error) {
         console.error('Error setting up buyers listener:', error)
         setError('Failed to connect to database')
-        setLoading(false)
+        setLoadingBuyers(false)
         return null
       }
     }
@@ -70,6 +71,71 @@ export default function BuyersPage() {
     const unsubscribe = setupRealtimeBuyers()
     return () => unsubscribe && unsubscribe()
   }, [])
+
+  useEffect(() => {
+    const setupRealtimeOrders = () => {
+      try {
+        const ordersRef = collection(db, 'orders')
+        const unsubscribe = onSnapshot(ordersRef,
+          (snapshot) => {
+            const ordersData = []
+            snapshot.forEach((doc) => {
+              const orderData = doc.data()
+              ordersData.push({
+                id: doc.id,
+                buyerId: orderData.buyerId || null,
+                totalAmount: orderData.totalAmount || 0,
+                statusProgress: orderData.statusProgress || orderData.status || null,
+                createdAt: orderData.createdAt || null,
+              })
+            })
+            setOrders(ordersData)
+            setLoadingOrders(false)
+          },
+          (error) => {
+            console.error('Error fetching orders:', error)
+            setOrders([])
+           setLoadingOrders(false)
+          }
+        )
+        return unsubscribe
+      } catch (error) {
+        console.error('Error setting up orders listener:', error)
+        setLoadingOrders(false)
+        return null
+      }
+    }
+
+    const unsubscribe = setupRealtimeOrders()
+    return () => unsubscribe && unsubscribe()
+  }, [])
+
+
+  const ordersByBuyerId = {}
+  orders.forEach((order) => {
+    if (!order.buyerId) return
+    if (!ordersByBuyerId[order.buyerId]) ordersByBuyerId[order.buyerId] = []
+    ordersByBuyerId[order.buyerId].push(order)
+  })
+
+  const buyers = rawBuyers.map((buyer) => {
+    const buyerOrders = ordersByBuyerId[buyer.id] || []
+    const completedOrders = buyerOrders.filter((o) => o.statusProgress === 'completed')
+    const totalSpent = completedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+
+    const lastOrder = buyerOrders.reduce((latest, o) => {
+      if (!o.createdAt) return latest
+      const d = new Date(o.createdAt)
+      return !latest || d > latest ? d : latest
+    }, null)
+
+    return {
+      ...buyer,
+      totalOrders: buyerOrders.length,
+      totalSpent,
+      lastOrderDate: lastOrder ? safeToDateString(lastOrder.toISOString()) : null,
+    }
+  })
 
   // Sort buyers based on selected criteria
   const sortedBuyers = [...buyers].sort((a, b) => {
