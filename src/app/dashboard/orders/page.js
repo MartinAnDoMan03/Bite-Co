@@ -6,6 +6,15 @@ import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase
 import { safeToISOString } from '../../../lib/dateUtils'
 
 // Map payment status and delivery status to display status
+//
+// NOTE: seller approval now happens BEFORE payment (awaiting_seller_approval ->
+// approved_awaiting_payment -> buyer pays -> processing -> delivery -> completed).
+// Because of that, paymentStatus is still 'pending' (not 'success') during the
+// whole approval stage, so those checks must NOT be gated behind
+// `paymentStatus === 'success'` anymore, or they never match and everything
+// falls through to 'pending'. Also covers the 'waiting_approval' alias and the
+// 'delivery' progress value, both of which are real values written by the API
+// but were previously unhandled here.
 const mapStatusToDisplayStatus = (paymentStatus, deliveryStatus) => {
   // Seller explicitly rejected the order during approval review
   if (deliveryStatus === 'rejected') {
@@ -14,19 +23,29 @@ const mapStatusToDisplayStatus = (paymentStatus, deliveryStatus) => {
   if (paymentStatus === 'failed' || deliveryStatus === 'cancelled') {
     return 'cancelled'
   }
+
+  // Approval stage happens before payment succeeds, so check these first,
+  // independent of paymentStatus.
+  if (deliveryStatus === 'awaiting_seller_approval' || deliveryStatus === 'waiting_approval') {
+    return 'awaiting_approval'
+  }
+  if (deliveryStatus === 'approved_awaiting_payment' || deliveryStatus === 'approved') {
+    return 'approved'
+  }
+
   if (paymentStatus === 'success') {
     if (deliveryStatus === 'completed') {
       return 'delivered'
-    } else if (deliveryStatus === 'approved') {
-      return 'approved'
-    } else if (deliveryStatus === 'in_progress' || deliveryStatus === 'preparing' || deliveryStatus === 'processing') {
+    } else if (
+      deliveryStatus === 'delivery' ||
+      deliveryStatus === 'in_progress' ||
+      deliveryStatus === 'preparing' ||
+      deliveryStatus === 'processing'
+    ) {
       return 'confirmed'
-    } else if (deliveryStatus === 'awaiting_seller_approval') {
-      return 'awaiting_approval'
-    } else {
-      return 'pending'
     }
   }
+
   return 'pending'
 }
 
@@ -111,6 +130,12 @@ export default function OrdersPage() {
               })
             })
             
+            // Sort newest first. Done client-side (instead of a Firestore
+            // orderBy) because not every order doc is guaranteed to have
+            // createdAt, and safeToISOString() always returns a valid date
+            // string, so this sort is safe even for older/incomplete docs.
+            ordersData.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
+
             // console.log('Found orders:', ordersData.length)
             setOrders(ordersData)
             setLoading(false)
