@@ -119,7 +119,6 @@ export default function OrdersPage() {
                 orderType: orderData.orderType || 'Regular',
                 orderDate: safeToISOString(orderData.createdAt),
                 deliveryDate: safeToISOString(orderData.deliveredAt),
-                estimatedDelivery: safeToISOString(orderData.estimatedDelivery),
                 paymentMethod: orderData.paymentType || orderData.paymentMethod || 'Unknown',
                 deliveryAddress: orderData.deliveryAddress || orderData.address || 'Unknown Address',
                 cancelReason: orderData.cancelReason || null,
@@ -391,14 +390,6 @@ export default function OrdersPage() {
                   <span className="text-sm text-gray-500">Delivered:</span>
                   <span className="ml-2 text-sm text-gray-900">
                     {new Date(order.deliveryDate).toLocaleString()}
-                  </span>
-                </div>
-              )}
-              {order.estimatedDelivery && (
-                <div>
-                  <span className="text-sm text-gray-500">Est. Delivery:</span>
-                  <span className="ml-2 text-sm text-gray-900">
-                    {new Date(order.estimatedDelivery).toLocaleString()}
                   </span>
                 </div>
               )}
