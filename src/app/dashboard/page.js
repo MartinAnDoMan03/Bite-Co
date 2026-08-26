@@ -6,7 +6,71 @@ import { collection, onSnapshot, query, orderBy, where, limit } from 'firebase/f
 import { safeToDate } from '../../lib/dateUtils'
 import Link from "next/link";
 
+// A "real" seller for stats purposes has to have an actual address on file —
+// same fallback chain used on the Sellers page (address / outletAddress /
+// pinAddress) — otherwise we're counting half-finished registrations that
+// never completed onboarding as if they were real, addressable sellers.
+const sellerHasAddress = (sellerData) => {
+  const addr = sellerData.address || sellerData.outletAddress || sellerData.pinAddress
+  return typeof addr === 'string' ? addr.trim().length > 0 : !!addr
+}
+
+const formatRelativeTime = (date) => {
+  const diffMs = Date.now() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`
+  const diffDay = Math.floor(diffHr / 24)
+  return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`
+}
+
+// Turn a raw order doc into a Recent Activity row, based on its real
+// status/statusProgress — replaces the old hardcoded fake activity list.
+const describeOrderActivity = (order) => {
+  const date = safeToDate(order.createdAt) || new Date()
+  const buyerName = order.buyerName || order.customerName || 'A buyer'
+  const shortId = order.id ? `#${order.id.slice(-6)}` : ''
+
+  let message = `New order ${shortId} placed by ${buyerName}`
+  let status = 'pending'
+
+  if (order.statusProgress === 'rejected') {
+    message = `Order ${shortId} was rejected by the seller`
+    status = 'error'
+  } else if (order.status === 'failed' || order.statusProgress === 'cancelled') {
+    message = `Order ${shortId} was cancelled`
+    status = 'error'
+  } else if (order.statusProgress === 'completed') {
+    message = `Order ${shortId} completed successfully`
+    status = 'success'
+  } else if (order.statusProgress === 'delivery') {
+    message = `Order ${shortId} is out for delivery`
+    status = 'success'
+  } else if (order.statusProgress === 'processing') {
+    message = `Order ${shortId} payment confirmed, now processing`
+    status = 'success'
+  } else if (order.statusProgress === 'approved_awaiting_payment') {
+    message = `Order ${shortId} approved by seller, awaiting payment`
+    status = 'pending'
+  } else if (order.statusProgress === 'awaiting_seller_approval' || order.statusProgress === 'waiting_approval') {
+    message = `New order ${shortId} awaiting seller approval`
+    status = 'pending'
+  }
+
+  return { id: order.id, message, time: formatRelativeTime(date), status }
+}
+
 export default function DashboardOverview() {
+  // Raw docs from each collection — kept separate from `stats` so we can
+  // recompute every derived number (growth %, conversion rate, etc.) in one
+  // place whenever any of them changes, instead of each listener guessing at
+  // numbers owned by another collection.
+  const [rawSellers, setRawSellers] = useState([])
+  const [rawBuyers, setRawBuyers] = useState([])
+  const [rawOrders, setRawOrders] = useState([])
+
   const [stats, setStats] = useState({
     totalSellers: 0,
     activeSellers: 0,
@@ -14,52 +78,28 @@ export default function DashboardOverview() {
     totalBuyers: 0,
     totalOrders: 0,
     totalRevenue: 0,
-    monthlyGrowth: 0,
-    weeklyOrders: []
+    monthlyGrowth: 0,   // order-count growth, last 30 days vs the 30 before that
+    sellerGrowth: 0,
+    buyerGrowth: 0,
+    revenueGrowth: 0,
+    conversionRate: 0,  // % of buyers who have placed at least one order
+    weeklyOrders: [],
+    recentActivity: []
   })
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // --- Fetch raw data ---
   useEffect(() => {
-    const unsubscribers = setupRealtimeData()
-    return () => {
-      unsubscribers.forEach(unsubscribe => unsubscribe && unsubscribe())
-    }
-  }, [])
-
-  const setupRealtimeData = () => {
     const unsubscribers = []
 
     try {
-      // Listen to sellers collection
-      const sellersRef = collection(db, 'sellers')
-      const sellersUnsubscribe = onSnapshot(sellersRef, 
+      const sellersUnsubscribe = onSnapshot(collection(db, 'sellers'),
         (snapshot) => {
-          let totalSellers = 0
-          let activeSellers = 0
-          let pendingApprovals = 0
-
-          // console.log('Total documents in sellers collection:', snapshot.size)
-
-          snapshot.forEach((doc) => {
-            const sellerData = doc.data()
-            // console.log('Seller data:', { id: doc.id, status: sellerData.status })
-            
-            totalSellers++
-            if (sellerData.status === 'approved') {
-              activeSellers++
-            } else {
-              pendingApprovals++
-            }
-          })
-
-          setStats(prevStats => ({
-            ...prevStats,
-            totalSellers,
-            activeSellers,
-            pendingApprovals
-          }))
+          const sellersData = []
+          snapshot.forEach((doc) => sellersData.push({ id: doc.id, ...doc.data() }))
+          setRawSellers(sellersData)
         },
         (error) => {
           console.error('Error fetching sellers:', error)
@@ -68,17 +108,11 @@ export default function DashboardOverview() {
       )
       unsubscribers.push(sellersUnsubscribe)
 
-      // Listen to buyers collection
-      const buyersRef = collection(db, 'buyers')
-      const buyersUnsubscribe = onSnapshot(buyersRef, 
+      const buyersUnsubscribe = onSnapshot(collection(db, 'buyers'),
         (snapshot) => {
-          const totalBuyers = snapshot.size
-          // console.log('Total documents in buyers collection:', totalBuyers)
-
-          setStats(prevStats => ({
-            ...prevStats,
-            totalBuyers
-          }))
+          const buyersData = []
+          snapshot.forEach((doc) => buyersData.push({ id: doc.id, ...doc.data() }))
+          setRawBuyers(buyersData)
         },
         (error) => {
           console.error('Error fetching buyers:', error)
@@ -87,79 +121,28 @@ export default function DashboardOverview() {
       )
       unsubscribers.push(buyersUnsubscribe)
 
-      // Listen to orders collection
-      const ordersRef = collection(db, 'orders')
       // Remove orderBy to avoid issues if createdAt doesn't exist on all documents
-      const ordersUnsubscribe = onSnapshot(ordersRef, 
+      const ordersUnsubscribe = onSnapshot(collection(db, 'orders'),
         (snapshot) => {
-          let totalOrders = 0
-          let totalRevenue = 0
-          const weeklyOrdersMap = {
-            'Sun': 0, 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0
-          }
-          
-          const oneWeekAgo = new Date()
-          oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-
-          // console.log('Total documents in orders collection:', snapshot.size)
-
-          snapshot.forEach((doc) => {
-            const orderData = doc.data()
-            // console.log('Order data:', { 
-            //   id: doc.id, 
-            //   status: orderData.status, 
-            //   statusProgress: orderData.statusProgress, 
-            //   totalAmount: orderData.totalAmount 
-            // })
-            
-            totalOrders++
-            
-            // Only count revenue from successful orders
-            if (orderData.status === 'success' && orderData.totalAmount) {
-              totalRevenue += orderData.totalAmount
-            }
-
-            // Count weekly orders
-            if (orderData.createdAt) {
-              try {
-                const orderDate = safeToDate(orderData.createdAt)
-                if (orderDate && orderDate >= oneWeekAgo) {
-                  const dayName = orderDate.toLocaleDateString('en-US', { weekday: 'short' })
-                  if (weeklyOrdersMap[dayName] !== undefined) {
-                    weeklyOrdersMap[dayName]++
-                  }
-                }
-              } catch (error) {
-                console.warn('Error processing order date:', error)
-              }
-            }
-          })
-
-          const weeklyOrders = Object.entries(weeklyOrdersMap).map(([day, orders]) => ({ day, orders }))
-
-          setStats(prevStats => ({
-            ...prevStats,
-            totalOrders,
-            totalRevenue,
-            monthlyGrowth: 15.3, // This would need historical data comparison
-            weeklyOrders
-          }))
+          const ordersData = []
+          snapshot.forEach((doc) => ordersData.push({ id: doc.id, ...doc.data() }))
+          setRawOrders(ordersData)
         },
         (error) => {
           console.error('Error fetching orders:', error)
+          setError('Failed to load order data')
         }
       )
       unsubscribers.push(ordersUnsubscribe)
 
-      setLoading(false)
       setError(null)
-
     } catch (error) {
       console.error('Error setting up real-time listeners:', error)
       setError('Failed to connect to database')
       setLoading(false)
-      
-      // Fallback to mock data
+
+      // Fallback to mock data so the layout still renders something sane
+      // if Firestore itself is unreachable.
       setStats({
         totalSellers: 12,
         activeSellers: 10,
@@ -168,6 +151,10 @@ export default function DashboardOverview() {
         totalOrders: 48,
         totalRevenue: 1250000,
         monthlyGrowth: 15.3,
+        sellerGrowth: 0,
+        buyerGrowth: 0,
+        revenueGrowth: 0,
+        conversionRate: 0,
         weeklyOrders: [
           { day: 'Mon', orders: 5 },
           { day: 'Tue', orders: 8 },
@@ -176,12 +163,101 @@ export default function DashboardOverview() {
           { day: 'Fri', orders: 12 },
           { day: 'Sat', orders: 15 },
           { day: 'Sun', orders: 9 }
-        ]
+        ],
+        recentActivity: []
       })
     }
 
-    return unsubscribers
-  }
+    return () => unsubscribers.forEach(unsubscribe => unsubscribe && unsubscribe())
+  }, [])
+
+  // --- Derive all display stats from the raw data ---
+  useEffect(() => {
+    const now = new Date()
+    const last30 = new Date(now); last30.setDate(now.getDate() - 30)
+    const prev30 = new Date(now); prev30.setDate(now.getDate() - 60)
+    const oneWeekAgo = new Date(now); oneWeekAgo.setDate(now.getDate() - 7)
+    const getDate = (ts) => safeToDate(ts) || new Date(0)
+    const growthPct = (recent, previous) => {
+      if (previous > 0) return ((recent - previous) / previous) * 100
+      return recent > 0 ? 100 : 0
+    }
+
+    // ---- Sellers: only ones with a real address count as real sellers ----
+    const sellersWithAddress = rawSellers.filter(sellerHasAddress)
+    const totalSellers = sellersWithAddress.length
+    const activeSellers = sellersWithAddress.filter(s => s.status === 'approved').length
+    const pendingApprovals = sellersWithAddress.filter(s => s.status !== 'approved').length
+    const sellersLast30 = sellersWithAddress.filter(s => getDate(s.createdAt) >= last30).length
+    const sellersPrev30 = sellersWithAddress.filter(s => {
+      const d = getDate(s.createdAt)
+      return d >= prev30 && d < last30
+    }).length
+    const sellerGrowth = growthPct(sellersLast30, sellersPrev30)
+
+    // ---- Buyers ----
+    const totalBuyers = rawBuyers.length
+    const buyersLast30 = rawBuyers.filter(b => getDate(b.createdAt) >= last30).length
+    const buyersPrev30 = rawBuyers.filter(b => {
+      const d = getDate(b.createdAt)
+      return d >= prev30 && d < last30
+    }).length
+    const buyerGrowth = growthPct(buyersLast30, buyersPrev30)
+
+    // ---- Orders, revenue, weekly chart, conversion ----
+    let totalRevenue = 0
+    let ordersLast30 = 0, ordersPrev30 = 0
+    let revenueLast30 = 0, revenuePrev30 = 0
+    const weeklyOrdersMap = { 'Sun': 0, 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0 }
+    const buyerIdsWhoOrdered = new Set()
+
+    rawOrders.forEach((order) => {
+      if (order.status === 'success' && order.totalAmount) {
+        totalRevenue += order.totalAmount
+      }
+      if (order.buyerId) buyerIdsWhoOrdered.add(order.buyerId)
+
+      const orderDate = getDate(order.createdAt)
+      if (orderDate >= oneWeekAgo) {
+        const dayName = orderDate.toLocaleDateString('en-US', { weekday: 'short' })
+        if (weeklyOrdersMap[dayName] !== undefined) weeklyOrdersMap[dayName]++
+      }
+      if (orderDate >= last30) {
+        ordersLast30++
+        if (order.status === 'success') revenueLast30 += (order.totalAmount || 0)
+      } else if (orderDate >= prev30 && orderDate < last30) {
+        ordersPrev30++
+        if (order.status === 'success') revenuePrev30 += (order.totalAmount || 0)
+      }
+    })
+
+    const weeklyOrders = Object.entries(weeklyOrdersMap).map(([day, orders]) => ({ day, orders }))
+    const monthlyGrowth = growthPct(ordersLast30, ordersPrev30)
+    const revenueGrowth = growthPct(revenueLast30, revenuePrev30)
+    const conversionRate = totalBuyers > 0 ? (buyerIdsWhoOrdered.size / totalBuyers) * 100 : 0
+
+    const recentActivity = [...rawOrders]
+      .sort((a, b) => getDate(b.createdAt) - getDate(a.createdAt))
+      .slice(0, 5)
+      .map(describeOrderActivity)
+
+    setStats({
+      totalSellers,
+      activeSellers,
+      pendingApprovals,
+      totalBuyers,
+      totalOrders: rawOrders.length,
+      totalRevenue,
+      monthlyGrowth: Number(monthlyGrowth.toFixed(1)),
+      sellerGrowth: Number(sellerGrowth.toFixed(1)),
+      buyerGrowth: Number(buyerGrowth.toFixed(1)),
+      revenueGrowth: Number(revenueGrowth.toFixed(1)),
+      conversionRate: Number(conversionRate.toFixed(1)),
+      weeklyOrders,
+      recentActivity
+    })
+    setLoading(false)
+  }, [rawSellers, rawBuyers, rawOrders])
 
   const StatCard = ({ title, value, icon, change, changeType }) => (
     <div className="bg-white/70 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-6 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300 hover:scale-[1.02]">
@@ -195,7 +271,7 @@ export default function DashboardOverview() {
             <p className="text-2xl font-bold text-slate-900">{value}</p>
           </div>
         </div>
-        {change && (
+        {change !== undefined && change !== null && (
           <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-sm font-medium ${
             changeType === 'positive' 
               ? 'bg-emerald-600 text-white' 
@@ -211,31 +287,29 @@ export default function DashboardOverview() {
     </div>
   )
 
-  const RecentActivity = () => (
+  const RecentActivity = ({ activities }) => (
     <div className="bg-white/70 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-6">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
-        <button className="text-sm text-[#711330] hover:text-[#8b1538] font-medium">View All</button>
+        <Link href="/dashboard/orders" className="text-sm text-[#711330] hover:text-[#8b1538] font-medium">View All</Link>
       </div>
       <div className="space-y-4">
-        {[
-          { type: 'seller_registered', message: 'New seller "Warung Bahari" registered', time: '2 hours ago', status: 'pending' },
-          { type: 'order_completed', message: 'Order #5847 completed successfully', time: '3 hours ago', status: 'success' },
-          { type: 'seller_approved', message: 'Seller "Kedai Nusantara" approved', time: '5 hours ago', status: 'success' },
-          { type: 'payment_received', message: 'Payment of Rp 150,000 received', time: '8 hours ago', status: 'success' },
-          { type: 'seller_rejected', message: 'Seller application rejected - incomplete documents', time: '1 day ago', status: 'error' }
-        ].map((activity, index) => (
-          <div key={index} className="flex items-center space-x-4 p-3 rounded-xl hover:bg-slate-50 transition-colors duration-200">
-            <div className={`w-3 h-3 rounded-full ${
-              activity.status === 'success' ? 'bg-emerald-400' :
-              activity.status === 'pending' ? 'bg-amber-400' : 'bg-red-400'
-            }`}></div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900">{activity.message}</p>
-              <p className="text-xs text-slate-500">{activity.time}</p>
+        {activities.length === 0 ? (
+          <p className="text-sm text-slate-500 text-center py-6">No recent activity yet.</p>
+        ) : (
+          activities.map((activity) => (
+            <div key={activity.id} className="flex items-center space-x-4 p-3 rounded-xl hover:bg-slate-50 transition-colors duration-200">
+              <div className={`w-3 h-3 rounded-full ${
+                activity.status === 'success' ? 'bg-emerald-400' :
+                activity.status === 'pending' ? 'bg-amber-400' : 'bg-red-400'
+              }`}></div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-900">{activity.message}</p>
+                <p className="text-xs text-slate-500">{activity.time}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   )
@@ -303,8 +377,8 @@ export default function DashboardOverview() {
               <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
             </svg>
           }
-          change={12.5}
-          changeType="positive"
+          change={stats.sellerGrowth}
+          changeType={stats.sellerGrowth >= 0 ? 'positive' : 'negative'}
         />
         <StatCard
           title="Active Sellers"
@@ -314,8 +388,6 @@ export default function DashboardOverview() {
               <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
             </svg>
           }
-          change={8.2}
-          changeType="positive"
         />
         <StatCard
           title="Pending Approvals"
@@ -334,8 +406,8 @@ export default function DashboardOverview() {
               <path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd"/>
             </svg>
           }
-          change={23.1}
-          changeType="positive"
+          change={stats.buyerGrowth}
+          changeType={stats.buyerGrowth >= 0 ? 'positive' : 'negative'}
         />
       </div>
 
@@ -348,8 +420,8 @@ export default function DashboardOverview() {
               <path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clipRule="evenodd"/>
             </svg>
           }
-          change={18.7}
-          changeType="positive"
+          change={stats.monthlyGrowth}
+          changeType={stats.monthlyGrowth >= 0 ? 'positive' : 'negative'}
         />
         <StatCard
           title="Total Revenue"
@@ -360,8 +432,8 @@ export default function DashboardOverview() {
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd"/>
             </svg>
           }
-          change={stats.monthlyGrowth}
-          changeType="positive"
+          change={stats.revenueGrowth}
+          changeType={stats.revenueGrowth >= 0 ? 'positive' : 'negative'}
         />
         <StatCard
           title="Monthly Growth"
@@ -371,19 +443,15 @@ export default function DashboardOverview() {
               <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
             </svg>
           }
-          change={2.4}
-          changeType="positive"
         />
         <StatCard
           title="Conversion Rate"
-          value="24.8%"
+          value={`${stats.conversionRate}%`}
           icon={
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd"/>
             </svg>
           }
-          change={1.2}
-          changeType="positive"
         />
       </div>
 
@@ -411,7 +479,7 @@ export default function DashboardOverview() {
         </div>
 
         {/* Recent Activity */}
-        <RecentActivity />
+        <RecentActivity activities={stats.recentActivity} />
       </div>
 
       {/* Quick Actions */}
