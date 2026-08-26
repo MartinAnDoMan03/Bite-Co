@@ -36,6 +36,25 @@ export default function PaymentVerificationPage() {
 
   useEffect(() => { fetchOrders(activeTab) }, [activeTab, fetchOrders])
 
+  // This page fetches once via REST instead of a live Firestore listener
+  // (unlike Orders/Sellers/Dashboard, which use onSnapshot), so it never
+  // finds out about changes made elsewhere — e.g. deleting an order doc
+  // directly in the Firebase Console. Refetch whenever the tab regains
+  // focus/visibility so stale entries (deleted orders, broken proof images)
+  // clear up without the admin having to manually flip tabs back and forth.
+  useEffect(() => {
+    const handleFocus = () => fetchOrders(activeTab)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchOrders(activeTab)
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [activeTab, fetchOrders])
+
   const formatRupiah = (amount) => `Rp ${(amount || 0).toLocaleString('id-ID')}`
 
   const formatDate = (dateStr) => {
@@ -109,23 +128,35 @@ export default function PaymentVerificationPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-2 border-b border-gray-200">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? 'border-[#711330] text-[#711330]'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-            <span className="ml-1.5 bg-gray-100 text-gray-500 py-0.5 px-1.5 rounded-full text-xs">
-              {orders.length !== undefined && activeTab === tab.key ? orders.length : ''}
-            </span>
-          </button>
-        ))}
+      <div className="mb-6 flex items-center justify-between border-b border-gray-200">
+        <div className="flex gap-2">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-[#711330] text-[#711330]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+              <span className="ml-1.5 bg-gray-100 text-gray-500 py-0.5 px-1.5 rounded-full text-xs">
+                {orders.length !== undefined && activeTab === tab.key ? orders.length : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+        {/* This page doesn't listen for live changes, so if an order was
+            deleted or edited elsewhere (e.g. directly in Firebase Console),
+            this lets the admin pull fresh data without reloading the page. */}
+        <button
+          onClick={() => fetchOrders(activeTab)}
+          className="mb-2 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-[#711330] border border-gray-200 rounded-full hover:border-[#711330] transition-colors flex items-center gap-1"
+          title="Muat ulang data terbaru"
+        >
+          ⟳ Refresh
+        </button>
       </div>
 
       {orders.length === 0 ? (
@@ -155,6 +186,20 @@ export default function PaymentVerificationPage() {
                   alt="Bukti pembayaran"
                   className="w-full h-48 object-contain bg-gray-50 rounded-lg mb-3 cursor-pointer"
                   onClick={() => setPreviewImage(order.paymentProofUrl)}
+                  onError={(e) => {
+                    // Proof image was deleted from Storage (e.g. cleaning up
+                    // test data) but this card hasn't been refetched yet —
+                    // show a clear placeholder instead of a broken image icon.
+                    e.currentTarget.onerror = null
+                    e.currentTarget.src =
+                      'data:image/svg+xml;charset=UTF-8,' +
+                      encodeURIComponent(
+                        `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150">
+                          <rect width="200" height="150" fill="#f3f4f6"/>
+                          <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9ca3af" font-family="sans-serif" font-size="11">Gambar tidak ditemukan</text>
+                        </svg>`
+                      )
+                  }}
                 />
               )}
 
