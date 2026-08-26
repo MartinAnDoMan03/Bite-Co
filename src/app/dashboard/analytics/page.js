@@ -2,10 +2,32 @@
 
 import { useState, useEffect } from 'react'
 import { db } from '../../../lib/firebase'
-import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore'
-import { safeToDateString } from '../../../lib/dateUtils'
+import { collection, onSnapshot } from 'firebase/firestore'
+import { safeToDate } from '../../../lib/dateUtils'
+
+// Same rule as the Dashboard Overview page: a "real" seller has to have an
+// actual address on file, otherwise half-finished registrations get counted
+// as real, addressable sellers.
+const sellerHasAddress = (sellerData) => {
+  const addr = sellerData.address || sellerData.outletAddress || sellerData.pinAddress
+  return typeof addr === 'string' ? addr.trim().length > 0 : !!addr
+}
+
+const TIME_RANGE_MS = {
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
+  '1y': 365 * 24 * 60 * 60 * 1000
+}
 
 export default function AnalyticsPage() {
+  // Raw docs from each collection, kept separate from the derived `analytics`
+  // state so every number is recomputed together whenever any collection OR
+  // the selected time range changes.
+  const [rawBuyers, setRawBuyers] = useState([])
+  const [rawSellers, setRawSellers] = useState([])
+  const [rawOrders, setRawOrders] = useState([])
+
   const [analytics, setAnalytics] = useState({
     userGrowth: [],
     orderTrends: [],
@@ -22,244 +44,169 @@ export default function AnalyticsPage() {
     monthlyGrowth: 0
   })
   const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState('30d') // 7d, 30d, 90d, 1y
+  const [timeRange, setTimeRange] = useState('30d') // 7d, 30d, 90d, 1y — now actually filters the Key Metrics / category / city / hourly data below
 
+  // --- Fetch raw data: three independent listeners, each cleaned up properly ---
+  // (previously these were nested inside one another — every buyers update
+  // re-subscribed a brand new sellers listener, which re-subscribed a brand
+  // new orders listener, none of which were ever unsubscribed, so listeners
+  // just kept stacking up for as long as the page stayed open.)
   useEffect(() => {
-    const calculateAnalytics = (buyers, sellers, orders) => {
-      try {
-        // Filter orders by time range
-        const now = new Date()
-        const timeRangeMs = {
-          '7d': 7 * 24 * 60 * 60 * 1000,
-          '30d': 30 * 24 * 60 * 60 * 1000,
-          '90d': 90 * 24 * 60 * 60 * 1000,
-          '1y': 365 * 24 * 60 * 60 * 1000
-        }
-        
-        const cutoffDate = new Date(now.getTime() - timeRangeMs[timeRange])
-        
-        // Filter successful orders only
-        const successfulOrders = orders.filter(order => 
-          order.status === 'success' && order.statusProgress === 'completed'
-        )
-        
-        // Calculate total revenue
-        const totalRevenue = successfulOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0)
-        
-        // Calculate average rating
-        const sellersWithRatings = sellers.filter(seller => seller.rating > 0)
-        const avgRating = sellersWithRatings.length > 0 
-          ? sellersWithRatings.reduce((sum, seller) => sum + seller.rating, 0) / sellersWithRatings.length
-          : 0
-        
-        // Calculate monthly growth (compare last 30 days vs previous 30 days)
-        const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        const previous30Days = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
-        
-        const recentOrders = orders.filter(order => {
-          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)
-          return orderDate >= last30Days
-        })
-        
-        const previousOrders = orders.filter(order => {
-          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)
-          return orderDate >= previous30Days && orderDate < last30Days
-        })
-        
-        const monthlyGrowth = previousOrders.length > 0 
-          ? ((recentOrders.length - previousOrders.length) / previousOrders.length) * 100
-          : 0
-        
-        // Group orders by category
-        const categoryStats = {}
-        successfulOrders.forEach(order => {
-          const seller = sellers.find(s => s.id === order.sellerId)
-          const category = seller?.category || 'Other'
-          
-          if (!categoryStats[category]) {
-            categoryStats[category] = { orders: 0, revenue: 0 }
-          }
-          categoryStats[category].orders += 1
-          categoryStats[category].revenue += order.totalAmount || 0
-        })
-        
-        const topCategories = Object.entries(categoryStats)
-          .map(([name, stats]) => ({
-            name,
-            orders: stats.orders,
-            revenue: stats.revenue,
-            growth: Math.random() * 20 + 5 // TODO: Calculate real growth
-          }))
-          .sort((a, b) => b.orders - a.orders)
-          .slice(0, 5)
-        
-        // Group orders by location/city
-        const locationStats = {}
-        successfulOrders.forEach(order => {
-          const city = order.deliveryAddress?.split(',').slice(-2, -1)[0]?.trim() || 'Unknown'
-          
-          if (!locationStats[city]) {
-            locationStats[city] = { orders: 0, revenue: 0 }
-          }
-          locationStats[city].orders += 1
-          locationStats[city].revenue += order.totalAmount || 0
-        })
-        
-        const geographicData = Object.entries(locationStats)
-          .map(([city, stats]) => ({
-            city,
-            orders: stats.orders,
-            revenue: stats.revenue
-          }))
-          .sort((a, b) => b.orders - a.orders)
-          .slice(0, 5)
-        
-        // Generate user growth data (last 6 months)
-        const userGrowth = []
-        for (let i = 5; i >= 0; i--) {
-          const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-          const buyersCount = buyers.filter(buyer => {
-            const createdDate = buyer.createdAt?.toDate ? buyer.createdAt.toDate() : new Date(buyer.createdAt)
-            return createdDate <= date
-          }).length
-          
-          const sellersCount = sellers.filter(seller => {
-            const createdDate = seller.createdAt?.toDate ? seller.createdAt.toDate() : new Date(seller.createdAt)
-            return createdDate <= date
-          }).length
-          
-          userGrowth.push({
-            date: date.toISOString().substring(0, 10),
-            buyers: buyersCount,
-            sellers: sellersCount
-          })
-        }
-        
-        // Generate order trends (last 6 months)
-        const orderTrends = []
-        for (let i = 5; i >= 0; i--) {
-          const startDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
-          const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
-          
-          const monthOrders = successfulOrders.filter(order => {
-            const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)
-            return orderDate >= startDate && orderDate <= endDate
-          })
-          
-          const monthRevenue = monthOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0)
-          
-          orderTrends.push({
-            month: startDate.toLocaleString('default', { month: 'short' }),
-            orders: monthOrders.length,
-            revenue: monthRevenue
-          })
-        }
-        
-        // Generate hourly activity pattern
-        const hourlyStats = Array.from({ length: 24 }, (_, hour) => ({ hour: `${hour.toString().padStart(2, '0')}:00`, orders: 0 }))
-        
-        successfulOrders.forEach(order => {
-          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)
-          const hour = orderDate.getHours()
-          hourlyStats[hour].orders += 1
-        })
-        
-        // Calculate conversion rate (successful orders / total orders)
-        const conversionRate = orders.length > 0 ? (successfulOrders.length / orders.length) * 100 : 0
-        
-        // Update analytics state
-        setAnalytics({
-          userGrowth,
-          orderTrends,
-          revenueData: topCategories.map(cat => ({
-            category: cat.name,
-            revenue: cat.revenue,
-            percentage: totalRevenue > 0 ? (cat.revenue / totalRevenue) * 100 : 0
-          })),
-          topCategories,
-          userActivity: hourlyStats,
-          geographicData,
-          totalBuyers: buyers.length,
-          totalSellers: sellers.filter(s => s.status === 'approved').length,
-          totalOrders: successfulOrders.length,
-          totalRevenue,
-          avgRating,
-          conversionRate,
-          monthlyGrowth
-        })
-        
-        setLoading(false)
-      } catch (error) {
-        console.error('Error calculating analytics:', error)
-        setLoading(false)
-      }
+    const unsubBuyers = onSnapshot(collection(db, 'buyers'), (snapshot) => {
+      const buyersData = []
+      snapshot.forEach((doc) => buyersData.push({ id: doc.id, ...doc.data() }))
+      setRawBuyers(buyersData)
+    })
+
+    const unsubSellers = onSnapshot(collection(db, 'sellers'), (snapshot) => {
+      const sellersData = []
+      snapshot.forEach((doc) => sellersData.push({ id: doc.id, ...doc.data() }))
+      setRawSellers(sellersData)
+    })
+
+    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const ordersData = []
+      snapshot.forEach((doc) => ordersData.push({ id: doc.id, ...doc.data() }))
+      setRawOrders(ordersData)
+    })
+
+    return () => {
+      unsubBuyers()
+      unsubSellers()
+      unsubOrders()
     }
+  }, [])
 
-    const setupRealtimeAnalytics = () => {
-      try {
-        // Real-time listeners for all collections
-        const unsubscribeBuyers = onSnapshot(collection(db, 'buyers'), (snapshot) => {
-          const buyersData = []
-          snapshot.forEach((doc) => {
-            const data = doc.data()
-            buyersData.push({
-              id: doc.id,
-              createdAt: data.createdAt,
-              location: data.address?.city || data.location || 'Unknown'
-            })
-          })
-          
-          const unsubscribeSellers = onSnapshot(collection(db, 'sellers'), (snapshot) => {
-            const sellersData = []
-            snapshot.forEach((doc) => {
-              const data = doc.data()
-              sellersData.push({
-                id: doc.id,
-                createdAt: data.createdAt,
-                status: data.status,
-                category: data.businessCategory || data.category || 'Food & Beverage',
-                rating: data.rating || 0,
-                ratingCount: data.rating_count || 0
-              })
-            })
-            
-            const unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-              const ordersData = []
-              snapshot.forEach((doc) => {
-                const data = doc.data()
-                ordersData.push({
-                  id: doc.id,
-                  createdAt: data.createdAt,
-                  totalAmount: data.totalAmount || 0,
-                  status: data.status,
-                  statusProgress: data.statusProgress,
-                  orderType: data.orderType,
-                  buyerId: data.buyerId,
-                  sellerId: data.sellerId,
-                  items: data.items || [],
-                  deliveryAddress: data.deliveryAddress || '',
-                  pax: data.pax || 1
-                })
-              })
-              
-              // Calculate analytics from real data
-              calculateAnalytics(buyersData, sellersData, ordersData)
-            })
-          })
-        })
-        
-      } catch (error) {
-        console.error('Error setting up analytics:', error)
-        setLoading(false)
+  // --- Derive all analytics from the raw data + selected time range ---
+  useEffect(() => {
+    try {
+      const now = new Date()
+      const getDate = (ts) => safeToDate(ts) || new Date(0)
+
+      // The selected time range now genuinely scopes every metric below that
+      // isn't inherently a fixed-window chart (the 6-month trend lines and
+      // "Monthly Growth", which is always a calendar month-over-month figure
+      // by definition, stay fixed regardless of the button pressed).
+      const cutoffDate = new Date(now.getTime() - TIME_RANGE_MS[timeRange])
+      const ordersInRange = rawOrders.filter(order => getDate(order.createdAt) >= cutoffDate)
+
+      const successfulOrders = ordersInRange.filter(order =>
+        order.status === 'success' && order.statusProgress === 'completed'
+      )
+
+      const totalRevenue = successfulOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0)
+
+      // Only sellers with a real address count as real sellers.
+      const sellersWithAddress = rawSellers.filter(sellerHasAddress)
+      const sellersWithRatings = sellersWithAddress.filter(seller => seller.rating > 0)
+      const avgRating = sellersWithRatings.length > 0
+        ? sellersWithRatings.reduce((sum, seller) => sum + seller.rating, 0) / sellersWithRatings.length
+        : 0
+
+      // Monthly Growth: always a fixed calendar-month comparison, independent
+      // of the timeRange selector above (its label says "Monthly", so it
+      // should mean that regardless of which chart window is selected).
+      const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const previous30Days = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+      const recentOrders = rawOrders.filter(order => getDate(order.createdAt) >= last30Days)
+      const previousOrders = rawOrders.filter(order => {
+        const d = getDate(order.createdAt)
+        return d >= previous30Days && d < last30Days
+      })
+      const monthlyGrowth = previousOrders.length > 0
+        ? ((recentOrders.length - previousOrders.length) / previousOrders.length) * 100
+        : (recentOrders.length > 0 ? 100 : 0)
+
+      // Top categories, scoped to the selected time range. Dropped the fake
+      // `growth: Math.random() * 20 + 5 // TODO` field — it was never even
+      // rendered anywhere, just a placeholder number sitting in state.
+      const categoryStats = {}
+      successfulOrders.forEach(order => {
+        const seller = rawSellers.find(s => s.id === order.sellerId)
+        const category = seller?.category || seller?.businessCategory || 'Other'
+        if (!categoryStats[category]) categoryStats[category] = { orders: 0, revenue: 0 }
+        categoryStats[category].orders += 1
+        categoryStats[category].revenue += order.totalAmount || 0
+      })
+      const topCategories = Object.entries(categoryStats)
+        .map(([name, stats]) => ({ name, orders: stats.orders, revenue: stats.revenue }))
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 5)
+
+      // Geographic distribution, scoped to the selected time range.
+      const locationStats = {}
+      successfulOrders.forEach(order => {
+        const city = order.deliveryAddress?.split(',').slice(-2, -1)[0]?.trim() || 'Unknown'
+        if (!locationStats[city]) locationStats[city] = { orders: 0, revenue: 0 }
+        locationStats[city].orders += 1
+        locationStats[city].revenue += order.totalAmount || 0
+      })
+      const geographicData = Object.entries(locationStats)
+        .map(([city, stats]) => ({ city, orders: stats.orders, revenue: stats.revenue }))
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 5)
+
+      // User growth: fixed 6-month trend, independent of the timeRange
+      // selector (same reasoning as Monthly Growth — this is a dedicated
+      // long-range trend chart, not a "current period" figure).
+      const userGrowth = []
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const buyersCount = rawBuyers.filter(b => getDate(b.createdAt) <= date).length
+        const sellersCount = sellersWithAddress.filter(s => getDate(s.createdAt) <= date).length
+        userGrowth.push({ date: date.toISOString().substring(0, 10), buyers: buyersCount, sellers: sellersCount })
       }
+
+      // Order trends: fixed 6-month trend, same reasoning.
+      const orderTrends = []
+      for (let i = 5; i >= 0; i--) {
+        const startDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
+        const monthOrders = rawOrders.filter(order => {
+          const orderDate = getDate(order.createdAt)
+          return order.status === 'success' && order.statusProgress === 'completed' &&
+            orderDate >= startDate && orderDate <= endDate
+        })
+        const monthRevenue = monthOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0)
+        orderTrends.push({ month: startDate.toLocaleString('default', { month: 'short' }), orders: monthOrders.length, revenue: monthRevenue })
+      }
+
+      // Hourly activity pattern, scoped to the selected time range.
+      const hourlyStats = Array.from({ length: 24 }, (_, hour) => ({ hour: `${hour.toString().padStart(2, '0')}:00`, orders: 0 }))
+      successfulOrders.forEach(order => {
+        const hour = getDate(order.createdAt).getHours()
+        hourlyStats[hour].orders += 1
+      })
+
+      // Conversion rate (successful / total orders), scoped to the selected time range.
+      const conversionRate = ordersInRange.length > 0 ? (successfulOrders.length / ordersInRange.length) * 100 : 0
+
+      setAnalytics({
+        userGrowth,
+        orderTrends,
+        revenueData: topCategories.map(cat => ({
+          category: cat.name,
+          revenue: cat.revenue,
+          percentage: totalRevenue > 0 ? (cat.revenue / totalRevenue) * 100 : 0
+        })),
+        topCategories,
+        userActivity: hourlyStats,
+        geographicData,
+        totalBuyers: rawBuyers.length,
+        totalSellers: sellersWithAddress.filter(s => s.status === 'approved').length,
+        totalOrders: successfulOrders.length,
+        totalRevenue,
+        avgRating,
+        conversionRate,
+        monthlyGrowth
+      })
+
+      setLoading(false)
+    } catch (error) {
+      console.error('Error calculating analytics:', error)
+      setLoading(false)
     }
-
-    setupRealtimeAnalytics()
-  }, [timeRange])
-
-  const fetchAnalytics = async () => {
-    // This function is now replaced by setupRealtimeAnalytics
-  }
+  }, [rawBuyers, rawSellers, rawOrders, timeRange])
 
   const ChartCard = ({ title, children }) => (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -269,22 +216,26 @@ export default function AnalyticsPage() {
   )
 
   const SimpleBarChart = ({ data, dataKey, label }) => (
-    <div className="space-y-3">
-      {data.map((item, index) => (
-        <div key={index} className="flex items-center">
-          <div className="w-20 text-sm text-gray-600">{item[label]}</div>
-          <div className="flex-1 mx-4">
-            <div className="bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-[#711330] h-2 rounded-full"
-                style={{ width: `${(item[dataKey] / Math.max(...data.map(d => d[dataKey]))) * 100}%` }}
-              ></div>
+    data.length === 0 ? (
+      <p className="text-sm text-gray-400 text-center py-6">No data for this period.</p>
+    ) : (
+      <div className="space-y-3">
+        {data.map((item, index) => (
+          <div key={index} className="flex items-center">
+            <div className="w-20 text-sm text-gray-600">{item[label]}</div>
+            <div className="flex-1 mx-4">
+              <div className="bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-[#711330] h-2 rounded-full"
+                  style={{ width: `${(item[dataKey] / Math.max(...data.map(d => d[dataKey]))) * 100}%` }}
+                ></div>
+              </div>
             </div>
+            <div className="w-16 text-sm text-gray-900 text-right">{item[dataKey]}</div>
           </div>
-          <div className="w-16 text-sm text-gray-900 text-right">{item[dataKey]}</div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    )
   )
 
   const LineChart = ({ data, xKey, yKey }) => (
@@ -294,7 +245,7 @@ export default function AnalyticsPage() {
           <div key={index} className="flex flex-col items-center">
             <div 
               className="bg-[#711330] w-8 rounded-t"
-              style={{ height: `${(item[yKey] / Math.max(...data.map(d => d[yKey]))) * 100}px` }}
+              style={{ height: `${(item[yKey] / Math.max(...data.map(d => d[yKey]), 1)) * 100}px` }}
             ></div>
             <div className="text-xs text-gray-600 mt-2">{item[xKey]}</div>
           </div>
@@ -431,7 +382,7 @@ export default function AnalyticsPage() {
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* User Growth */}
-        <ChartCard title="User Growth">
+        <ChartCard title="User Growth (Last 6 Months)">
           <div className="space-y-4">
             <div className="flex space-x-4">
               <div className="flex items-center">
@@ -448,17 +399,17 @@ export default function AnalyticsPage() {
         </ChartCard>
 
         {/* Order Trends */}
-        <ChartCard title="Monthly Orders">
+        <ChartCard title="Monthly Orders (Last 6 Months)">
           <LineChart data={analytics.orderTrends} xKey="month" yKey="orders" />
         </ChartCard>
 
         {/* Top Categories */}
-        <ChartCard title="Top Categories">
+        <ChartCard title={`Top Categories (${timeRange})`}>
           <SimpleBarChart data={analytics.topCategories} dataKey="orders" label="name" />
         </ChartCard>
 
         {/* Geographic Distribution */}
-        <ChartCard title="Orders by City">
+        <ChartCard title={`Orders by City (${timeRange})`}>
           <SimpleBarChart data={analytics.geographicData} dataKey="orders" label="city" />
         </ChartCard>
       </div>
@@ -467,48 +418,55 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Revenue by Category */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Revenue by Category</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Revenue by Category ({timeRange})</h3>
           <div className="space-y-3">
-            {analytics.revenueData.map((item, index) => (
-              <div key={index}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">{item.category}</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {item.percentage}%
-                  </span>
+            {analytics.revenueData.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">No data for this period.</p>
+            ) : (
+              analytics.revenueData.map((item, index) => (
+                <div key={index}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm text-gray-600">{item.category}</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {item.percentage.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-[#711330] h-2 rounded-full"
+                      style={{ width: `${item.percentage}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Rp {(item.revenue / 1000000).toFixed(1)}M
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-[#711330] h-2 rounded-full"
-                    style={{ width: `${item.percentage}%` }}
-                  ></div>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Rp {(item.revenue / 1000000).toFixed(1)}M
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         {/* Daily Activity */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Daily Activity Pattern</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Daily Activity Pattern ({timeRange})</h3>
           <div className="space-y-2">
-            {analytics.userActivity.slice(6, 22).map((item, index) => (
-              <div key={index} className="flex items-center">
-                <div className="w-12 text-xs text-gray-600">{item.hour}</div>
-                <div className="flex-1 mx-2">
-                  <div className="bg-gray-200 rounded-full h-1">
-                    <div 
-                      className="bg-green-600 h-1 rounded-full"
-                      style={{ width: `${(item.orders / 250) * 100}%` }}
-                    ></div>
+            {analytics.userActivity.slice(6, 22).map((item, index) => {
+              const maxOrders = Math.max(...analytics.userActivity.map(h => h.orders), 1)
+              return (
+                <div key={index} className="flex items-center">
+                  <div className="w-12 text-xs text-gray-600">{item.hour}</div>
+                  <div className="flex-1 mx-2">
+                    <div className="bg-gray-200 rounded-full h-1">
+                      <div 
+                        className="bg-green-600 h-1 rounded-full"
+                        style={{ width: `${(item.orders / maxOrders) * 100}%` }}
+                      ></div>
+                    </div>
                   </div>
+                  <div className="w-8 text-xs text-gray-900 text-right">{item.orders}</div>
                 </div>
-                <div className="w-8 text-xs text-gray-900 text-right">{item.orders}</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -525,11 +483,11 @@ export default function AnalyticsPage() {
               <span className="text-sm font-medium text-gray-900">{analytics.totalSellers}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Orders</span>
+              <span className="text-sm text-gray-600">Orders ({timeRange})</span>
               <span className="text-sm font-medium text-gray-900">{analytics.totalOrders}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Success Rate</span>
+              <span className="text-sm text-gray-600">Success Rate ({timeRange})</span>
               <span className="text-sm font-medium text-green-600">{analytics.conversionRate.toFixed(1)}%</span>
             </div>
             <div className="flex justify-between items-center">

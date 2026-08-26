@@ -423,23 +423,16 @@ export default function OrdersPage() {
             <div className="space-y-2 mb-4">
               {order.items.map((item, index) => {
                 const quantity = item.quantity || 1
-                const price = item.price || 0
                 const pax = order.pax || 1
-                
-                // For catering orders, multiply by pax
                 const isCateringOrder = order.orderType && order.orderType.toLowerCase().includes('catering')
-                const itemTotal = isCateringOrder ? (price * quantity * pax) : (price * quantity)
-                
+
                 return (
-                  <div key={index} className="flex justify-between items-center text-sm">
+                  <div key={index} className="text-sm">
                     <span className="text-gray-900">
                       {quantity}x {item.name}
                       {isCateringOrder && pax > 1 && (
                         <span className="text-gray-500 ml-1">({pax} pax)</span>
                       )}
-                    </span>
-                    <span className="text-gray-600">
-                      {formatCurrency(itemTotal)}
                     </span>
                   </div>
                 )
