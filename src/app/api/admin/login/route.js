@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 const DEFAULT_ADMIN = {
   username: 'admin',
-  password: 'admin123',
+  password: 'bite011004',
   email: 'admin@biteandco.com',
   role: 'admin'
 };

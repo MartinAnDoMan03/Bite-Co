@@ -7,7 +7,7 @@ const emailConfig = {
   secure: true, // Use SSL
   auth: {
     user: 'no-reply@biteandco.id',
-    pass: 'O/W6Vh3Cx[',
+    pass: 'Bite#011004',
   },
 };
 
