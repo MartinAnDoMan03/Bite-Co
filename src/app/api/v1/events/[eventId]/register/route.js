@@ -30,7 +30,11 @@ export async function POST(request, { params }) {
     const body = await request.json();
     const { eventCategory, eventDescription } = body;
 
-    if (!eventCategory || !['makanan', 'minuman', 'snack'].includes(eventCategory)) {
+    const validCategories = ['makanan', 'minuman', 'snack'];
+    if (!Array.isArray(eventCategory) || eventCategory.length === 0) {
+      return withCORSHeaders(NextResponse.json({ error: 'Pilih minimal 1 kategori' }, { status: 400 }));
+    }
+    if (!eventCategory.every((c) => validCategories.includes(c))) {
       return withCORSHeaders(NextResponse.json({ error: 'Kategori tidak valid' }, { status: 400 }));
     }
     if (!eventDescription || !eventDescription.trim()) {
@@ -56,7 +60,6 @@ export async function POST(request, { params }) {
       events: [...currentEvents, eventId],
       eventCategory,
       eventDescription: eventDescription.trim(),
-      standNumber: null, // diisi admin manual belakangan
     });
 
     // Simpan juga sebagai catatan pendaftaran terpisah, buat riwayat/audit
