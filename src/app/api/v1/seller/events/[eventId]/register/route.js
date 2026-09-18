@@ -71,7 +71,7 @@ export async function POST(request, { params }) {
 
     return withCORSHeaders(NextResponse.json({
       success: true,
-      message: 'Pendaftaran berhasil! Kamu akan tampil di listing event setelah admin melengkapi nomor stand.',
+      message: 'Pendaftaran berhasil!',
     }));
 
   } catch (error) {
