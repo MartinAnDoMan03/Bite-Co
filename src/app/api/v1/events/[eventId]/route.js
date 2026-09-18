@@ -1,4 +1,4 @@
-import { db } from '@/firebase/configure';
+import { db, storage } from '@/firebase/configure';
 import { NextResponse } from 'next/server';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifyAdmin } from '@/lib/admin-auth';
@@ -41,6 +41,7 @@ export async function GET(request, { params }) {
     );
   }
 }
+
 // PUT: Update event via admin only
 export async function PUT(request, { params }) {
   try {

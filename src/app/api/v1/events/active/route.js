@@ -8,9 +8,6 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
-    // Cari event yang isActive = true. Asumsi cuma 1 event aktif dalam
-    // satu waktu — kalau nanti mau banyak sekaligus, ganti .get() jadi
-    // ambil semua dan balikin array.
     const snapshot = await db.collection('events')
       .where('isActive', '==', true)
       .limit(1)

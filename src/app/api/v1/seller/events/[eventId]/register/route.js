@@ -41,7 +41,6 @@ export async function POST(request, { params }) {
       return withCORSHeaders(NextResponse.json({ error: 'Deskripsi produk wajib diisi' }, { status: 400 }));
     }
 
-    // Cek event-nya beneran ada & aktif
     const eventDoc = await db.collection('events').doc(eventId).get();
     if (!eventDoc.exists) {
       return withCORSHeaders(NextResponse.json({ error: 'Event tidak ditemukan' }, { status: 404 }));
@@ -55,14 +54,12 @@ export async function POST(request, { params }) {
       return withCORSHeaders(NextResponse.json({ error: 'Kamu sudah terdaftar di event ini' }, { status: 400 }));
     }
 
-    // Update dokumen seller: tambah eventId ke array events, set kategori & deskripsi
     await sellerRef.update({
       events: [...currentEvents, eventId],
       eventCategory,
       eventDescription: eventDescription.trim(),
     });
 
-    // Simpan juga sebagai catatan pendaftaran terpisah, buat riwayat/audit
     await db.collection('eventRegistrations').add({
       eventId,
       sellerId: sellerData.id,
