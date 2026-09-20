@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { adminLogout, getCurrentAdmin } from '../../lib/auth'
+import { adminLogout, getCurrentAdmin, verifyAdminSession } from '../../lib/auth'
 
 const navigation = [
   { 
@@ -135,23 +135,23 @@ export default function DashboardLayout({ children }) {
     // Only run authentication check on client side
     if (!isClient) return
 
-    const checkAuth = () => {
-      // console.log('🔍 Checking authentication...')
-      
+    const checkAuth = async () => {
       try {
-        const user = getCurrentAdmin()
-        
-        if (!user) {
-          // No user found, redirect to login
-          // console.log('❌ No user found, redirecting to login')
+        const localuser = getCurrentAdmin()
+        if (!localuser) {
           setLoading(false)
           router.replace('/login')
           return
         }
-        
-        // Valid user found
-        // console.log('✅ Valid user found:', user.username)
-        setUser(user)
+
+        const sessionUser = await verifyAdminSession()
+        if (!sessionUser) {
+          localStorage.removeItem('bite-admin-user')
+          setLoading(false)
+          router.replace('/login')
+          return
+        }
+        setUser(sessionUser)
         setLoading(false)
       } catch (error) {
         console.error('❌ Auth check error:', error)

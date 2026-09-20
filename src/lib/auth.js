@@ -89,6 +89,18 @@ export const getCurrentAdmin = () => {
   return null
 }
 
+// Verify admin session server side by checking the httpOnly cookie/JWT is still valid
+export const verifyAdminSession = async () => {
+  try {
+    const res = await fetch('/api/admin/me')
+    if (!res.ok) return null
+    return await res.json()
+  } catch (error) {
+    console.error('Session verification error:', error)
+    return null
+  }
+}
+
 // Check if user is authenticated
 export const isAuthenticated = () => {
   const user = getCurrentAdmin()

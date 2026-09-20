@@ -270,6 +270,7 @@ export async function POST(request) {
       sellerId: orderData.sellerId,
       items: orderData.items,
       totalAmount: orderData.totalAmount,
+      adminFee: orderData.adminFee || 0,
       status: 'pending',
       statusProgress,
       deliveryAddress: orderData.deliveryAddress || '',

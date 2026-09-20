@@ -77,21 +77,21 @@ export default function LandingPage() {
 
   const testimonials = [
     {
-      name: "Sarah Johnson",
-      role: "Event Planner",
-      text: "Bite&Co made our corporate catering so easy! The variety and quality exceeded our expectations.",
+      name: "Mala",
+      role: "Google Playstore Review",
+      text: "This application is very helpful for overseas children, boarding school children and has very good nutritional features👍🤗",
       rating: 5
     },
     {
-      name: "Michael Chen",
-      role: "Food Lover",
-      text: "Best food delivery app I've used. Real-time tracking and amazing restaurant selection!",
+      name: "Amelya P.",
+      role: "Google Playstore Review",
+      text: "very helpful",
       rating: 5
     },
     {
-      name: "Lisa Rodriguez",
-      role: "Busy Mom",
-      text: "Perfect for family dinners. The kids love the variety and I love the convenience.",
+      name: "Fernando P.",
+      role: "Google Playstore Review",
+      text: "This application is very helpful for us students, keep up the good work, Bite and Co.",
       rating: 5
     }
   ]
