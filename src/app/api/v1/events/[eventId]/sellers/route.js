@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
-
+export const dynamic = 'force-dynamic';
 export async function OPTIONS() {
   return handleOptions();
 }
