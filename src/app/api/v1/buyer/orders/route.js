@@ -4,6 +4,7 @@ import { db } from '@/firebase/configure';
 import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { notifyUser } from '@/lib/notifications';
+import { isVoucherExpired } from '@/lib/voucherValidation';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -273,6 +274,10 @@ export async function POST(request) {
           const voucher = voucherDoc.data();
 
           if (!voucher.isActive) throw new Error('Voucher tidak aktif');
+          const eventDoc = await tx.get(db.collection('events').doc(orderData.eventId));
+          if(!eventDoc.exists || isVoucherExpired(voucher, eventDoc.data())) {
+            throw new Error('Voucher sudah tidak berlaku');
+          }
           if (voucher.eventId !== orderData.eventId) throw new Error('Voucher tidak berlaku untuk event ini');
           if (voucher.sellerId && voucher.sellerId !== orderData.sellerId) throw new Error('Voucher ini hanya berlaku untuk tenant tertentu');
           if (voucher.usedCount >= voucher.quota) throw new Error('Kuota voucher sudah habis');

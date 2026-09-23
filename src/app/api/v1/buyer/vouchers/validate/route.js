@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifyBuyerToken } from '@/middleware/buyerAuth';
+import { isVoucherExpired } from "@/lib/voucherValidation";
 
 export async function OPTIONS() {
   return handleOptions();
@@ -28,6 +29,11 @@ export async function POST(request) {
     }
     const codeUpper = code.trim().toUpperCase();
 
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    if(!eventDoc.exists) {
+        return withCORSHeaders(NextResponse.json({ valid: false, message: 'Event tidak ditemukan' }));
+    }
+
     const snap = await db.collection('eventVouchers').where('code', '==', codeUpper).limit(1).get();
     if (snap.empty) {
       return withCORSHeaders(NextResponse.json({ valid: false, message: 'Kode voucher tidak ditemukan' }));
@@ -35,7 +41,7 @@ export async function POST(request) {
     const voucherDoc = snap.docs[0];
     const voucher = voucherDoc.data();
 
-    if (!voucher.isActive) {
+    if (!voucher.isActive || isVoucherExpired(voucher, eventDoc.data())) {
       return withCORSHeaders(NextResponse.json({ valid: false, message: 'Voucher tidak aktif' }));
     }
     if (voucher.eventId !== eventId) {

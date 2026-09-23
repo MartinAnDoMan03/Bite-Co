@@ -20,7 +20,7 @@ export default function EventsPage() {
   const [vouchers, setVouchers] = useState([])
   const [vouchersLoading, setVouchersLoading] = useState(false)
   const [voucherEligibleSellers, setVoucherEligibleSellers] = useState([])
-  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '' })
+  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '', expiryMode: 'event', customExpiryDate: '' })
   const [creatingVoucher, setCreatingVoucher] = useState(false)
 
   const [form, setForm] = useState({
@@ -260,6 +260,8 @@ export default function EventsPage() {
           sellerId: voucherForm.sellerId || null,
           discountAmount: Number(voucherForm.discountAmount),
           quota: Number(voucherForm.quota),
+          expiryMode: voucherForm.expiryMode,
+          customExpiryDate: voucherForm.expiryMode === 'custom' ? voucherForm.customExpiryDate : null,
         }),
       })
       const data = await res.json()
@@ -678,6 +680,27 @@ export default function EventsPage() {
                             <option key={s.id} value={s.id}>{s.name}</option>
                           ))}
                         </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku Sampai</label>
+                        <div className="flex gap-3 mb-2">
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                            <input type="radio" checked={voucherForm.expiryMode === 'event'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'event' }))} />
+                            Ikut tanggal event
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                            <input type="radio" checked={voucherForm.expiryMode === 'custom'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'custom' }))} />
+                            Tanggal sendiri
+                          </label>
+                        </div>
+                        {voucherForm.expiryMode === 'custom' && (
+                          <input
+                            type="date"
+                            className={inputStyle}
+                            value={voucherForm.customExpiryDate}
+                            onChange={e => setVoucherForm(f => ({ ...f, customExpiryDate: e.target.value }))}
+                          />
+                        )}
                       </div>
                     </div>
                     <button

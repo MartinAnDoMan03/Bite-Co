@@ -21,7 +21,11 @@ export async function GET(req, { params }) {
 export async function POST(req, { params }) {
   try {
     const { eventId } = params;
-    const { code, sellerId, discountAmount, quota } = await req.json();
+    const { code, sellerId, discountAmount, quota, expiryMode, customExpiryDate } = await req.json();
+
+    if(expiryMode === 'custom' && !customExpiryDate) {
+      return withCORSHeaders(NextResponse.json({ success: false, message: 'Tanggal expired wajib diisi jika menggunakan tanggal sendiri' }, { status: 400 }));
+    }
 
     if (!code || !code.trim()) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'Kode voucher wajib diisi' }, { status: 400 }));
@@ -51,6 +55,8 @@ export async function POST(req, { params }) {
       usedCount: 0,
       isActive: true,
       createdAt: new Date().toISOString(),
+      expiryMode: expiryMode === 'custom' ? 'custom' : 'event',
+      customExpiryDate: expiryMode === 'custom' ? customExpiryDate : null,
     });
 
     return withCORSHeaders(NextResponse.json({ success: true, voucherId: voucherRef.id }));
