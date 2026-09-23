@@ -14,7 +14,6 @@ export default function EventsPage() {
   const [participantsModalEvent, setParticipantsModalEvent] = useState(null)
   const [participants, setParticipants] = useState([])
   const [participantsLoading, setParticipantsLoading] = useState(false)
-  const [standInputs, setStandInputs] = useState({})
   const [actionSellerId, setActionSellerId] = useState(null)
   const [vouchersModalEvent, setVouchersModalEvent] = useState(null)
   const [vouchers, setVouchers] = useState([])
@@ -172,40 +171,27 @@ export default function EventsPage() {
   const openParticipants = async (event) => {
     setParticipantsModalEvent(event)
     setParticipantsLoading(true)
-    try{
+    try {
       const res = await fetch(`/api/v1/events/${event.id}/sellers?includeAll=true`)
       const data = await res.json()
       if (data.success) {
-        setParticipants(data.sellers)
-        const inputs = {}
-        data.sellers.forEach(s => { inputs[s.id] = s.standNumber || '' })
-        setStandInputs(inputs)
+        // Pending duluan biar admin langsung lihat yang perlu ditindaklanjuti
+        const sorted = [...data.sellers].sort((a, b) => {
+          if (a.status === b.status) return 0
+          if (a.status === 'pending') return -1
+          if (b.status === 'pending') return 1
+          return 0
+        })
+        setParticipants(sorted)
       }
     } catch (err) {
-      alert ('Gagal memuat peserta: ' + err.message)
-    } finally{
+      alert('Gagal memuat peserta: ' + err.message)
+    } finally {
       setParticipantsLoading(false)
     }
   }
 
-  const saveStandNumber = async (sellerId) => {
-    setActionSellerId(sellerId)
-    try {
-      const res = await fetch(`/api/v1/events/${participantsModalEvent.id}/sellers`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sellerId, standNumber: standInputs[sellerId] }),
-      })
-      const data = await res.json()
-      if (!data.success) alert('Gagal menyimpan: ' + (data.message || data.error))
-    } catch (err) {
-      alert('Gagal menyimpan: ' + err.message)
-    } finally {
-      setActionSellerId(null)
-    }
-  }
-
-  const updateSellerStatus = async(sellerId, status) => {
+  const updateSellerStatus = async (sellerId, status) => {
     setActionSellerId(sellerId)
     try {
       const res = await fetch(`/api/v1/events/${participantsModalEvent.id}/sellers`, {
@@ -265,11 +251,11 @@ export default function EventsPage() {
         }),
       })
       const data = await res.json()
-      if(data.success) {
-        setVoucherForm({ code: '', sellerId: '', discountAmount: '', quota: '' })
+      if (data.success) {
+        setVoucherForm({ code: '', sellerId: '', discountAmount: '', quota: '', expiryMode: 'event', customExpiryDate: '' })
         const listRes = await fetch(`/api/v1/events/${vouchersModalEvent.id}/vouchers`)
         const listData = await listRes.json()
-        if(listData.success) setVouchers(listData.vouchers)
+        if (listData.success) setVouchers(listData.vouchers)
       } else {
         alert('Gagal membuat voucher: ' + (data.message || data.error))
       }
@@ -280,9 +266,9 @@ export default function EventsPage() {
     }
   }
 
-  const toggleVoucherActive = async(voucher) =>  {
+  const toggleVoucherActive = async (voucher) => {
     try {
-      const res = await fetch(`/api/events/${vouchersModalEvent.Event.id}/vouchers`, {
+      const res = await fetch(`/api/v1/events/${vouchersModalEvent.id}/vouchers`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voucherId: voucher.id, isActive: !voucher.isActive }),
@@ -367,14 +353,14 @@ export default function EventsPage() {
                   <button
                     onClick={() => openParticipants(event)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
-                    >
-                      Peserta
-                    </button>
+                  >
+                    Peserta
+                  </button>
                   <button
                     onClick={() => openVouchers(event)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
-                    >
-                      Voucher
+                  >
+                    Voucher
                   </button>
                   <button
                     onClick={() => openEdit(event)}
@@ -552,12 +538,16 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-      
+
+      {/* Modal Peserta — cuma review & approve/reject, tanpa nomor stand (nggak relevan, bukan data dari app) */}
       {participantsModalEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="p-5 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Peserta — {participantsModalEvent.name}</h2>
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Peserta — {participantsModalEvent.name}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Setujui mitra supaya menu mereka muncul di halaman event ini</p>
+              </div>
               <button onClick={() => setParticipantsModalEvent(null)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
             <div className="p-6 overflow-y-auto flex flex-col gap-3">
@@ -575,7 +565,7 @@ export default function EventsPage() {
                         <p className="font-semibold text-slate-900 truncate">{seller.name}</p>
                         <p className="text-xs text-slate-500">{seller.eventCategory?.join(', ') || '-'}</p>
                       </div>
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full shrink-0 ${
                         seller.status === 'approved' ? 'bg-green-100 text-green-700' :
                         seller.status === 'rejected' ? 'bg-red-100 text-red-700' :
                         'bg-amber-100 text-amber-700'
@@ -586,37 +576,24 @@ export default function EventsPage() {
                     {seller.eventDescription && (
                       <p className="text-xs text-slate-500 italic">&quot;{seller.eventDescription}&quot;</p>
                     )}
-                    <div className="flex items-center gap-2">
-                      <input
-                        className={`${inputStyle} w-28`}
-                        placeholder="Mis. A7"
-                        value={standInputs[seller.id] ?? ''}
-                        onChange={e => setStandInputs(prev => ({ ...prev, [seller.id]: e.target.value }))}
-                      />
-                      <button
-                        onClick={() => saveStandNumber(seller.id)}
-                        disabled={actionSellerId === seller.id}
-                        className="px-3 py-2 rounded-lg bg-[#711330] text-white text-xs font-semibold hover:bg-[#8a1a3c] disabled:opacity-50"
-                      >
-                        {actionSellerId === seller.id ? '...' : 'Simpan Stand'}
-                      </button>
+                    <div className="flex items-center gap-2 mt-1">
                       <div className="flex-1" />
                       {seller.status !== 'approved' && (
                         <button
                           onClick={() => updateSellerStatus(seller.id, 'approved')}
                           disabled={actionSellerId === seller.id}
-                          className="px-3 py-2 rounded-lg border border-green-300 text-green-600 text-xs font-semibold hover:bg-green-50 disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-lg border border-green-300 text-green-600 text-xs font-semibold hover:bg-green-50 disabled:opacity-50"
                         >
-                          Setujui
+                          {actionSellerId === seller.id ? '...' : 'Setujui'}
                         </button>
                       )}
                       {seller.status !== 'rejected' && (
                         <button
                           onClick={() => updateSellerStatus(seller.id, 'rejected')}
                           disabled={actionSellerId === seller.id}
-                          className="px-3 py-2 rounded-lg border border-red-300 text-red-500 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-lg border border-red-300 text-red-500 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
                         >
-                          Tolak
+                          {actionSellerId === seller.id ? '...' : 'Tolak'}
                         </button>
                       )}
                     </div>
@@ -628,128 +605,128 @@ export default function EventsPage() {
         </div>
       )}
 
-          {vouchersModalEvent && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                <div className="p-5 border-b border-slate-200 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">Voucher — {vouchersModalEvent.name}</h2>
-                  <button onClick={() => setVouchersModalEvent(null)} className="text-slate-400 hover:text-slate-600">✕</button>
-                </div>
-                <div className="p-6 overflow-y-auto flex flex-col gap-6">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Buat Voucher Baru</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1">Kode Voucher</label>
-                        <input
-                          className={inputStyle}
-                          value={voucherForm.code}
-                          onChange={e => setVoucherForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-                          placeholder="Mis. KMIEXPO10"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1">Diskon (%)</label>
-                        <input
-                          type="number"
-                          className={inputStyle}
-                          value={voucherForm.discountAmount}
-                          onChange={e => setVoucherForm(f => ({ ...f, discountAmount: e.target.value }))}
-                          placeholder="10"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-slate-600 block mb-1">Kuota Total</label>
-                        <input
-                          type="number"
-                          className={inputStyle}
-                          value={voucherForm.quota}
-                          onChange={e => setVoucherForm(f => ({ ...f, quota: e.target.value }))}
-                          placeholder="100"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku untuk</label>
-                        <select
-                          className={inputStyle}
-                          value={voucherForm.sellerId}
-                          onChange={e => setVoucherForm(f => ({ ...f, sellerId: e.target.value }))}
-                        >
-                          <option value="">Semua Tenant di Event Ini</option>
-                          {voucherEligibleSellers.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku Sampai</label>
-                        <div className="flex gap-3 mb-2">
-                          <label className="flex items-center gap-1.5 text-xs text-slate-700">
-                            <input type="radio" checked={voucherForm.expiryMode === 'event'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'event' }))} />
-                            Ikut tanggal event
-                          </label>
-                          <label className="flex items-center gap-1.5 text-xs text-slate-700">
-                            <input type="radio" checked={voucherForm.expiryMode === 'custom'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'custom' }))} />
-                            Tanggal sendiri
-                          </label>
-                        </div>
-                        {voucherForm.expiryMode === 'custom' && (
-                          <input
-                            type="date"
-                            className={inputStyle}
-                            value={voucherForm.customExpiryDate}
-                            onChange={e => setVoucherForm(f => ({ ...f, customExpiryDate: e.target.value }))}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleCreateVoucher}
-                      disabled={creatingVoucher}
-                      className="mt-4 w-full py-2.5 rounded-lg bg-[#711330] text-white text-sm font-semibold hover:bg-[#8a1a3c] disabled:opacity-50"
-                    >
-                      {creatingVoucher ? 'Membuat...' : '+ Buat Voucher'}
-                    </button>
+      {vouchersModalEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Voucher — {vouchersModalEvent.name}</h2>
+              <button onClick={() => setVouchersModalEvent(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div className="p-6 overflow-y-auto flex flex-col gap-6">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Buat Voucher Baru</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Kode Voucher</label>
+                    <input
+                      className={inputStyle}
+                      value={voucherForm.code}
+                      onChange={e => setVoucherForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                      placeholder="Mis. KMIEXPO10"
+                    />
                   </div>
-
                   <div>
-                    <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Voucher Aktif</h3>
-                    {vouchersLoading ? (
-                      <div className="flex justify-center py-10">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#711330]" />
-                      </div>
-                    ) : vouchers.length === 0 ? (
-                      <p className="text-center text-slate-400 py-6 text-sm">Belum ada voucher untuk event ini.</p>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {vouchers.map(v => {
-                          const scopedSeller = voucherEligibleSellers.find(s => s.id === v.sellerId)
-                          return (
-                            <div key={v.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-mono font-semibold text-slate-900">{v.code}</p>
-                                <p className="text-xs text-slate-500">
-                                  {v.discountAmount}% · {v.usedCount}/{v.quota} terpakai · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => toggleVoucherActive(v)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                                  v.isActive ? 'border-slate-300 text-slate-600 hover:bg-slate-50' : 'border-green-300 text-green-600 hover:bg-green-50'
-                                }`}
-                              >
-                                {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Diskon (%)</label>
+                    <input
+                      type="number"
+                      className={inputStyle}
+                      value={voucherForm.discountAmount}
+                      onChange={e => setVoucherForm(f => ({ ...f, discountAmount: e.target.value }))}
+                      placeholder="10"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Kuota Total</label>
+                    <input
+                      type="number"
+                      className={inputStyle}
+                      value={voucherForm.quota}
+                      onChange={e => setVoucherForm(f => ({ ...f, quota: e.target.value }))}
+                      placeholder="100"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku untuk</label>
+                    <select
+                      className={inputStyle}
+                      value={voucherForm.sellerId}
+                      onChange={e => setVoucherForm(f => ({ ...f, sellerId: e.target.value }))}
+                    >
+                      <option value="">Semua Tenant di Event Ini</option>
+                      {voucherEligibleSellers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku Sampai</label>
+                    <div className="flex gap-3 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                        <input type="radio" checked={voucherForm.expiryMode === 'event'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'event' }))} />
+                        Ikut tanggal event
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                        <input type="radio" checked={voucherForm.expiryMode === 'custom'} onChange={() => setVoucherForm(f => ({ ...f, expiryMode: 'custom' }))} />
+                        Tanggal sendiri
+                      </label>
+                    </div>
+                    {voucherForm.expiryMode === 'custom' && (
+                      <input
+                        type="date"
+                        className={inputStyle}
+                        value={voucherForm.customExpiryDate}
+                        onChange={e => setVoucherForm(f => ({ ...f, customExpiryDate: e.target.value }))}
+                      />
                     )}
                   </div>
                 </div>
+                <button
+                  onClick={handleCreateVoucher}
+                  disabled={creatingVoucher}
+                  className="mt-4 w-full py-2.5 rounded-lg bg-[#711330] text-white text-sm font-semibold hover:bg-[#8a1a3c] disabled:opacity-50"
+                >
+                  {creatingVoucher ? 'Membuat...' : '+ Buat Voucher'}
+                </button>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Voucher Aktif</h3>
+                {vouchersLoading ? (
+                  <div className="flex justify-center py-10">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#711330]" />
+                  </div>
+                ) : vouchers.length === 0 ? (
+                  <p className="text-center text-slate-400 py-6 text-sm">Belum ada voucher untuk event ini.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {vouchers.map(v => {
+                      const scopedSeller = voucherEligibleSellers.find(s => s.id === v.sellerId)
+                      return (
+                        <div key={v.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono font-semibold text-slate-900">{v.code}</p>
+                            <p className="text-xs text-slate-500">
+                              {v.discountAmount}% · {v.usedCount}/{v.quota} terpakai · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => toggleVoucherActive(v)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              v.isActive ? 'border-slate-300 text-slate-600 hover:bg-slate-50' : 'border-green-300 text-green-600 hover:bg-green-50'
+                            }`}
+                          >
+                            {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -24,7 +24,6 @@ export async function GET(req, { params }) {
         name: data.outletName || data.name || '-',
         logo: data.storeIcon || data.logo || null,
         rating: data.rating || null,
-        standNumber: details.standNumber || null,
         eventCategory: details.eventCategory || null,
         eventDescription: details.eventDescription || null,
         status: details.status || 'pending',
@@ -44,24 +43,19 @@ export async function GET(req, { params }) {
 export async function PATCH(req, { params }) {
   try {
     const { eventId } = params;
-    const { sellerId, standNumber, status } = await req.json();
+    const { sellerId, status } = await req.json();
 
     if (!sellerId) {
-      return withCORSHeaders(NextResponse.json({ success: false, message: 'sellerId wajib diisi'}, { status: 400 }));
+      return withCORSHeaders(NextResponse.json({ success: false, message: 'sellerId wajib diisi' }, { status: 400 }));
     }
-    if (status && !['pending', 'approved', 'rejected'].includes(status)) {
+    if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'Status tidak valid' }, { status: 400 }));
     }
 
-    const updates = {};
-    if (standNumber !== undefined) updates[`eventDetails.${eventId}.standNumber`] = standNumber || null;
-    if (status !== undefined) updates[`eventDetails.${eventId}.status`] = status;
+    await db.collection('sellers').doc(sellerId).update({
+      [`eventDetails.${eventId}.status`]: status,
+    });
 
-    if (Object.keys(updates).length === 0) {
-      return withCORSHeaders(NextResponse.json({ success: false, message: 'Tidak ada perubahan' }, { status: 400 }));
-    }
-
-    await db.collection('sellers').doc(sellerId).update(updates);
     return withCORSHeaders(NextResponse.json({ success: true }));
   } catch (e) {
     console.error('[Event Sellers PATCH Error]', e);

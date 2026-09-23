@@ -118,13 +118,16 @@ export async function PATCH(request, { params }) {
       return withCORSHeaders(NextResponse.json({ error: auth.error }, { status: auth.status }));
     }
     const { eventId } = params;
-    const { itemIds } = await request.json();
+    const { itemIds, standNumber } = await request.json();
     if (!Array.isArray(itemIds)) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'itemIds harus berupa array' }, { status: 400 }));
     }
-
+      if (standNumber !== null && standNumber !== undefined && typeof standNumber !== 'string') {
+    return withCORSHeaders(NextResponse.json({ success: false, message: 'standNumber tidak valid' }, { status: 400 }));
+  }
     await db.collection('sellers').doc(auth.sellerData.id).update({
       [`eventDetails.${eventId}.eventItemIds`]: itemIds,
+      [`eventDetails.${eventId}.standNumber`]: standNumber || null,
     });
 
     return withCORSHeaders(NextResponse.json({ success: true }));
