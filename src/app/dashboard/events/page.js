@@ -173,7 +173,7 @@ export default function EventsPage() {
     setParticipantsModalEvent(event)
     setParticipantsLoading(true)
     try{
-      const res = await fetch(`/api/v1/events/${event.id}/sellers`)
+      const res = await fetch(`/api/v1/events/${event.id}/sellers?includeAll=true`)
       const data = await res.json()
       if (data.success) {
         setParticipants(data.sellers)
