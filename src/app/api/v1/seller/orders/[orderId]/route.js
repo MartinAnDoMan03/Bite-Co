@@ -84,7 +84,9 @@ export async function PATCH(req, { params }) {
 
     const statusMessages = {
       processing: 'Pesanan Anda sedang diproses oleh penjual.',
-      delivery: 'Pesanan Anda sedang dalam perjalanan.',
+      delivery: orderData.eventId
+        ? `Pesanan Anda siap diambil di stand ${orderData.standNumber || '-'}.`
+        : 'Pesanan Anda sedang dalam perjalanan.',
       completed: 'Pesanan Anda telah selesai. Terima kasih!',
     };
     if (statusMessages[statusProgress]) {

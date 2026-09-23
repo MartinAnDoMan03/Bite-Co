@@ -19,6 +19,7 @@ export async function GET(req, context) {
     const { searchParams } = new URL(req.url);
     const buyerLat = parseFloat(searchParams.get('buyerLat'));
     const buyerLng = parseFloat(searchParams.get('buyerLng'));
+    const eventId = searchParams.get('eventId');
 
     // Function to calculate distance between two points using Haversine formula
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -44,6 +45,12 @@ export async function GET(req, context) {
 
     // Get categories array from seller document
     let categories = [];
+    if (eventId) {
+      const eventItemIds = data.eventDetails?.[eventId]?.eventItemIds || [];
+      categories = categories
+      .map(cat => ({ ...cat, items: cat.items.filter(item => eventItemIds.includes(item.id)) }))
+      .filter(cat => cat.items.length > 0);
+    }
     if (Array.isArray(data.categories)) {
       categories = data.categories.map(cat => ({
         id: cat.id || null, // FIX: id kategori sebelumnya tidak ikut di-mapping,

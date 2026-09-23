@@ -11,6 +11,11 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [imageFile, setImageFile] = useState(null)
+  const [participantsModalEvent, setParticipantsModalEvent] = useState(null)
+  const [participants, setParticipants] = useState([])
+  const [participantsLoading, setParticipantsLoading] = useState(false)
+  const [standInputs, setStandInputs] = useState({})
+  const [actionSellerId, setActionSellerId] = useState(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -158,6 +163,63 @@ export default function EventsPage() {
     await updateDoc(doc(db, 'events', event.id), { isActive: !event.isActive, updatedAt: new Date().toISOString() })
   }
 
+  const openParticipants = async (event) => {
+    setParticipantsModalEvent(event)
+    setParticipantsLoading(true)
+    try{
+      const res = await fetch(`/api/v1/events/${event.id}/sellers`)
+      const data = await res.json()
+      if (data.success) {
+        setParticipants(data.sellers)
+        const inputs = {}
+        data.sellers.forEach(s => { inputs[s.id] = s.standNumber || '' })
+        setStandInputs(inputs)
+      }
+    } catch (err) {
+      alert ('Gagal memuat peserta: ' + err.message)
+    } finally{
+      setParticipantsLoading(false)
+    }
+  }
+
+  const saveStandNumber = async (sellerId) => {
+    setActionSellerId(sellerId)
+    try {
+      const res = await fetch(`/api/v1/events/${participantsModalEvent.id}/sellers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId, standNumber: standInputs[sellerId] }),
+      })
+      const data = await res.json()
+      if (!data.success) alert('Gagal menyimpan: ' + (data.message || data.error))
+    } catch (err) {
+      alert('Gagal menyimpan: ' + err.message)
+    } finally {
+      setActionSellerId(null)
+    }
+  }
+
+  const updateSellerStatus = async(sellerId, status) => {
+    setActionSellerId(sellerId)
+    try {
+      const res = await fetch(`/api/v1/events/${participantsModalEvent.id}/sellers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sellerId, status }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setParticipants(prev => prev.map(s => s.id === sellerId ? { ...s, status } : s))
+      } else {
+        alert('Gagal mengubah status: ' + (data.message || data.error))
+      }
+    } catch (err) {
+      alert('Gagal mengubah status: ' + err.message)
+    } finally {
+      setActionSellerId(null)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -224,6 +286,12 @@ export default function EventsPage() {
                   >
                     {event.isActive ? 'Matikan' : 'Aktifkan'}
                   </button>
+                  <button
+                    onClick={() => openParticipants(event)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Peserta
+                    </button>
                   <button
                     onClick={() => openEdit(event)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-[#711330] text-[#711330] hover:bg-[#711330]/5 transition-colors"
@@ -396,6 +464,81 @@ export default function EventsPage() {
                   editingEvent ? 'Simpan Perubahan' : 'Buat Event'
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {participantsModalEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Peserta — {participantsModalEvent.name}</h2>
+              <button onClick={() => setParticipantsModalEvent(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div className="p-6 overflow-y-auto flex flex-col gap-3">
+              {participantsLoading ? (
+                <div className="flex justify-center py-10">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#711330]" />
+                </div>
+              ) : participants.length === 0 ? (
+                <p className="text-center text-slate-400 py-10">Belum ada seller yang mendaftar.</p>
+              ) : (
+                participants.map(seller => (
+                  <div key={seller.id} className="flex flex-col gap-2 border border-slate-100 rounded-xl p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{seller.name}</p>
+                        <p className="text-xs text-slate-500">{seller.eventCategory?.join(', ') || '-'}</p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                        seller.status === 'approved' ? 'bg-green-100 text-green-700' :
+                        seller.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {seller.status === 'approved' ? 'Disetujui' : seller.status === 'rejected' ? 'Ditolak' : 'Menunggu'}
+                      </span>
+                    </div>
+                    {seller.eventDescription && (
+                      <p className="text-xs text-slate-500 italic">&quot;{seller.eventDescription}&quot;</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        className={`${inputStyle} w-28`}
+                        placeholder="Mis. A7"
+                        value={standInputs[seller.id] ?? ''}
+                        onChange={e => setStandInputs(prev => ({ ...prev, [seller.id]: e.target.value }))}
+                      />
+                      <button
+                        onClick={() => saveStandNumber(seller.id)}
+                        disabled={actionSellerId === seller.id}
+                        className="px-3 py-2 rounded-lg bg-[#711330] text-white text-xs font-semibold hover:bg-[#8a1a3c] disabled:opacity-50"
+                      >
+                        {actionSellerId === seller.id ? '...' : 'Simpan Stand'}
+                      </button>
+                      <div className="flex-1" />
+                      {seller.status !== 'approved' && (
+                        <button
+                          onClick={() => updateSellerStatus(seller.id, 'approved')}
+                          disabled={actionSellerId === seller.id}
+                          className="px-3 py-2 rounded-lg border border-green-300 text-green-600 text-xs font-semibold hover:bg-green-50 disabled:opacity-50"
+                        >
+                          Setujui
+                        </button>
+                      )}
+                      {seller.status !== 'rejected' && (
+                        <button
+                          onClick={() => updateSellerStatus(seller.id, 'rejected')}
+                          disabled={actionSellerId === seller.id}
+                          className="px-3 py-2 rounded-lg border border-red-300 text-red-500 text-xs font-semibold hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Tolak
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -261,6 +261,44 @@ export async function POST(request) {
     }
 
     let statusProgress = 'awaiting_seller_approval';
+
+    let appliedVoucherId = null;
+    if (orderData.voucherCode) {
+      const codeUpper = orderData.voucherCode.trim().toUpperCase();
+      try {
+        await db.runTransaction(async (tx) => {
+          const voucherSnap = await tx.get(db.collection('eventVouchers').where('code', '==', codeUpper).limit(1));
+          if (voucherSnap.empty) throw new Error('Kode voucher tidak ditemukan');
+          const voucherDoc = voucherSnap.docs[0];
+          const voucher = voucherDoc.data();
+
+          if (!voucher.isActive) throw new Error('Voucher tidak aktif');
+          if (voucher.eventId !== orderData.eventId) throw new Error('Voucher tidak berlaku untuk event ini');
+          if (voucher.sellerId && voucher.sellerId !== orderData.sellerId) throw new Error('Voucher ini hanya berlaku untuk tenant tertentu');
+          if (voucher.usedCount >= voucher.quota) throw new Error('Kuota voucher sudah habis');
+
+          const redemptionQuery = await tx.get(
+            db.collection('voucherRedemptions')
+              .where('voucherId', '==', voucherDoc.id)
+              .where('buyerId', '==', buyerId)
+              .limit(1)
+          );
+          if (!redemptionQuery.empty) throw new Error('Kamu sudah pernah menggunakan voucher ini');
+
+          tx.update(voucherDoc.ref, { usedCount: voucher.usedCount + 1 });
+          tx.set(db.collection('voucherRedemptions').doc(), {
+            voucherId: voucherDoc.id,
+            code: codeUpper,
+            buyerId,
+            redeemedAt: new Date().toISOString(),
+          });
+
+          appliedVoucherId = voucherDoc.id;
+        });
+      } catch (err) {
+        return wrapCORS(createErrorResponse(err.message || 'Gagal menerapkan voucher', 400));
+      }
+    }
     
     const newOrder = {
       buyerId,
@@ -271,6 +309,8 @@ export async function POST(request) {
       items: orderData.items,
       totalAmount: orderData.totalAmount,
       adminFee: orderData.adminFee || 0,
+      eventId: orderData.eventId || null,
+      standNumber: orderData.eventId ? (sellerDatta?.eventDetails?.[orderData.eventId]?.standNumber || null) : null,
       status: 'pending',
       statusProgress,
       deliveryAddress: orderData.deliveryAddress || '',
@@ -294,6 +334,7 @@ export async function POST(request) {
       sellerAddress: sellerData?.address || null,
       sellerPinAddress: sellerData?.pinAddress || null,
       distance: distance,
+      voucherId: appliedVoucherId,
     };
 
     const orderRef = await db.collection('orders').add(newOrder);
