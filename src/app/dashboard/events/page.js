@@ -16,6 +16,12 @@ export default function EventsPage() {
   const [participantsLoading, setParticipantsLoading] = useState(false)
   const [standInputs, setStandInputs] = useState({})
   const [actionSellerId, setActionSellerId] = useState(null)
+  const [vouchersModalEvent, setVouchersModalEvent] = useState(null)
+  const [vouchers, setVouchers] = useState([])
+  const [vouchersLoading, setVouchersLoading] = useState(false)
+  const [voucherEligibleSellers, setVoucherEligibleSellers] = useState([])
+  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '' })
+  const [creatingVoucher, setCreatingVoucher] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -220,6 +226,76 @@ export default function EventsPage() {
     }
   }
 
+  const openVouchers = async (event) => {
+    setVouchersModalEvent(event)
+    setVouchersLoading(true)
+    try {
+      const [vouchersRes, sellersRes] = await Promise.all([
+        fetch(`/api/v1/events/${event.id}/vouchers`),
+        fetch(`/api/v1/events/${event.id}/sellers?includeAll=true`),
+      ])
+      const vouchersData = await vouchersRes.json()
+      const sellersData = await sellersRes.json()
+      if (vouchersData.success) setVouchers(vouchersData.vouchers)
+      if (sellersData.success) setVoucherEligibleSellers(sellersData.sellers)
+    } catch (err) {
+      alert('Gagal memuat voucher: ' + err.message)
+    } finally {
+      setVouchersLoading(false)
+    }
+  }
+
+  const handleCreateVoucher = async () => {
+    if (!voucherForm.code.trim() || !voucherForm.discountAmount || !voucherForm.quota) {
+      alert('Kode, diskon, dan kuota wajib diisi')
+      return
+    }
+    setCreatingVoucher(true)
+    try {
+      const res = await fetch(`/api/v1/events/${vouchersModalEvent.id}/vouchers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: voucherForm.code,
+          sellerId: voucherForm.sellerId || null,
+          discountAmount: Number(voucherForm.discountAmount),
+          quota: Number(voucherForm.quota),
+        }),
+      })
+      const data = await res.json()
+      if(data.success) {
+        setVoucherForm({ code: '', sellerId: '', discountAmount: '', quota: '' })
+        const listRes = await fetch(`/api/v1/events/${vouchersModalEvent.id}/vouchers`)
+        const listData = await listRes.json()
+        if(listData.success) setVouchers(listData.vouchers)
+      } else {
+        alert('Gagal membuat voucher: ' + (data.message || data.error))
+      }
+    } catch (err) {
+      alert('Gagal membuat voucher: ' + err.message)
+    } finally {
+      setCreatingVoucher(false)
+    }
+  }
+
+  const toggleVoucherActive = async(voucher) =>  {
+    try {
+      const res = await fetch(`/api/events/${vouchersModalEvent.Event.id}/vouchers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voucherId: voucher.id, isActive: !voucher.isActive }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setVouchers(prev => prev.map(v => v.id === voucher.id ? { ...v, isActive: !v.isActive } : v))
+      } else {
+        alert('Gagal mengubah status: ' + (data.message || data.error))
+      }
+    } catch (err) {
+      alert('Gagal mengubah status: ' + err.message)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -292,6 +368,12 @@ export default function EventsPage() {
                     >
                       Peserta
                     </button>
+                  <button
+                    onClick={() => openVouchers(event)}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Voucher
+                  </button>
                   <button
                     onClick={() => openEdit(event)}
                     className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-[#711330] text-[#711330] hover:bg-[#711330]/5 transition-colors"
@@ -543,6 +625,108 @@ export default function EventsPage() {
           </div>
         </div>
       )}
+
+          {vouchersModalEvent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-900">Voucher — {vouchersModalEvent.name}</h2>
+                  <button onClick={() => setVouchersModalEvent(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+                <div className="p-6 overflow-y-auto flex flex-col gap-6">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Buat Voucher Baru</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Kode Voucher</label>
+                        <input
+                          className={inputStyle}
+                          value={voucherForm.code}
+                          onChange={e => setVoucherForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                          placeholder="Mis. KMIEXPO10"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Diskon (%)</label>
+                        <input
+                          type="number"
+                          className={inputStyle}
+                          value={voucherForm.discountAmount}
+                          onChange={e => setVoucherForm(f => ({ ...f, discountAmount: e.target.value }))}
+                          placeholder="10"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Kuota Total</label>
+                        <input
+                          type="number"
+                          className={inputStyle}
+                          value={voucherForm.quota}
+                          onChange={e => setVoucherForm(f => ({ ...f, quota: e.target.value }))}
+                          placeholder="100"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku untuk</label>
+                        <select
+                          className={inputStyle}
+                          value={voucherForm.sellerId}
+                          onChange={e => setVoucherForm(f => ({ ...f, sellerId: e.target.value }))}
+                        >
+                          <option value="">Semua Tenant di Event Ini</option>
+                          {voucherEligibleSellers.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCreateVoucher}
+                      disabled={creatingVoucher}
+                      className="mt-4 w-full py-2.5 rounded-lg bg-[#711330] text-white text-sm font-semibold hover:bg-[#8a1a3c] disabled:opacity-50"
+                    >
+                      {creatingVoucher ? 'Membuat...' : '+ Buat Voucher'}
+                    </button>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wider">Voucher Aktif</h3>
+                    {vouchersLoading ? (
+                      <div className="flex justify-center py-10">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#711330]" />
+                      </div>
+                    ) : vouchers.length === 0 ? (
+                      <p className="text-center text-slate-400 py-6 text-sm">Belum ada voucher untuk event ini.</p>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {vouchers.map(v => {
+                          const scopedSeller = voucherEligibleSellers.find(s => s.id === v.sellerId)
+                          return (
+                            <div key={v.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-mono font-semibold text-slate-900">{v.code}</p>
+                                <p className="text-xs text-slate-500">
+                                  {v.discountAmount}% · {v.usedCount}/{v.quota} terpakai · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => toggleVoucherActive(v)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                                  v.isActive ? 'border-slate-300 text-slate-600 hover:bg-slate-50' : 'border-green-300 text-green-600 hover:bg-green-50'
+                                }`}
+                              >
+                                {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
     </div>
   )
 }

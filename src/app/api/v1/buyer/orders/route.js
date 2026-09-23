@@ -310,7 +310,7 @@ export async function POST(request) {
       totalAmount: orderData.totalAmount,
       adminFee: orderData.adminFee || 0,
       eventId: orderData.eventId || null,
-      standNumber: orderData.eventId ? (sellerDatta?.eventDetails?.[orderData.eventId]?.standNumber || null) : null,
+      standNumber: orderData.eventId ? (sellerData?.eventDetails?.[orderData.eventId]?.standNumber || null) : null,
       status: 'pending',
       statusProgress,
       deliveryAddress: orderData.deliveryAddress || '',
