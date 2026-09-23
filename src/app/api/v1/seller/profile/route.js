@@ -163,6 +163,7 @@ export async function GET(request) {
           openTime: userData.openTime || null,
           closeTime: userData.closeTime || null,
           isManuallyClosed: userData.isManuallyClosed || false,
+          eventDetails: userData.eventDetails || {},
         })
       );
 
