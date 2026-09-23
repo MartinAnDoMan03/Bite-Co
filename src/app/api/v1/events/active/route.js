@@ -10,15 +10,26 @@ export async function GET() {
   try {
     const snapshot = await db.collection('events')
       .where('isActive', '==', true)
-      .limit(1)
       .get();
 
     if (snapshot.empty) {
       return withCORSHeaders(NextResponse.json({ success: true, event: null }));
     }
 
-    const doc = snapshot.docs[0];
-    const event = { id: doc.id, ...doc.data() };
+    const todayStr = new Date().toISOString().split('T')[0]; 
+
+    const validDoc = snapshot.docs.find((doc) => {
+      const data = doc.data();
+      if (data.startDate && todayStr < data.startDate) return false;
+      if (data.endDate && todayStr > data.endDate) return false;
+      return true;
+    });
+
+    if (!validDoc) {
+      return withCORSHeaders(NextResponse.json({ success: true, event: null }));
+    }
+
+    const event = { id: validDoc.id, ...validDoc.data() };
 
     return withCORSHeaders(NextResponse.json({ success: true, event }));
   } catch (e) {
