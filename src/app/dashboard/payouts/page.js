@@ -219,6 +219,7 @@ export default function PayoutPage() {
                             <tr className="text-gray-400 text-xs uppercase">
                               <th className="text-left py-2">Order ID</th>
                               <th className="text-left py-2">Buyer</th>
+                              <th className="text-left py-2">Biaya Admin</th>
                               <th className="text-left py-2">Gross</th>
                               <th className="text-left py-2">Fee ({seller.earnings[0]?.platformFeePercent}%)</th>
                               <th className="text-left py-2">Net</th>
@@ -236,6 +237,7 @@ export default function PayoutPage() {
                                     {shortId}...
                                   </td>
                                   <td className="py-2 text-gray-600">{e.buyerName || '-'}</td>
+                                  <td className="py-2 text-gray-600">{formatRupiah(e.adminFee)} || 0</td>
                                   <td className="py-2 text-gray-600">{formatRupiah(e.grossAmount)}</td>
                                   <td className="py-2 text-gray-400">{formatRupiah(e.platformFee)}</td>
                                   <td className="py-2 font-medium text-gray-900">

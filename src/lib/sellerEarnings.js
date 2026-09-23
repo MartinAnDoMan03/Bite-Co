@@ -44,7 +44,13 @@ export async function createEarningIfCompleted(orderId, orderData, paymentStatus
       return { created: false, reason: 'already_exists' };
     }
 
-    const grossAmount = orderData.totalAmount;
+    // Biaya Admin (flat Rp2.500) sudah termasuk di totalAmount, tapi itu 100%
+    // pendapatan platform -- BUKAN bagian dari nilai jualan seller. Harus
+    // dikeluarkan dulu dari grossAmount sebelum komisi 10% dihitung, kalau
+    // nggak platform ikut ambil komisi dari uangnya sendiri, dan seller
+    // dirugikan sedikit di tiap transaksi.
+    const adminFee = orderData.adminFee || 0;
+    const grossAmount = orderData.totalAmount - adminFee;
     const platformFee = Math.round(grossAmount * (PLATFORM_FEE_PERCENT / 100));
     const netAmount = grossAmount - platformFee;
 
@@ -55,7 +61,9 @@ export async function createEarningIfCompleted(orderId, orderData, paymentStatus
       buyerId: orderData.buyerId || null,
       buyerName: orderData.buyerName || null,
       orderType: orderData.orderType || null,
-      grossAmount,
+      totalAmount: orderData.totalAmount, 
+      adminFee, 
+      grossAmount, 
       platformFeePercent: PLATFORM_FEE_PERCENT,
       platformFee,
       netAmount,
