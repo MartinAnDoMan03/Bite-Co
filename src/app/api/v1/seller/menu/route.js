@@ -34,7 +34,6 @@ export async function GET(request) {
   }
 }
 
-// POST: Add new menu item to a category
 // DELETE: Delete a menu item
 export async function DELETE(request) {
   try {
@@ -104,6 +103,7 @@ export async function PUT(request) {
     const categoryId = formData.get('category_id');
     const menuId = formData.get('menu_id');
     const imageFile = formData.get('image');
+    const eventOnly = formData.get('eventOnly') === 'true';
 
     // Validate input
     if (!name || !description || !price || !categoryId || !menuId) {
@@ -161,6 +161,7 @@ export async function PUT(request) {
       name,
       description,
       price,
+      eventOnly,
       ...(imageUrl && { image: imageUrl }),
       updatedAt: new Date().toISOString()
     };
@@ -178,6 +179,7 @@ export async function PUT(request) {
   }
 }
 
+// POST: Add new menu item to a category
 export async function POST(request) {
   try {
     const authResult = verifyToken(request);
@@ -193,6 +195,7 @@ export async function POST(request) {
     const price = parseFloat(formData.get('price'));
     const categoryId = formData.get('category_id');
     const imageFile = formData.get('image');
+    const eventOnly = formData.get('eventOnly') === 'true';
 
     // Validate input
     if (!name || !description || !price || !categoryId) {
@@ -236,7 +239,8 @@ export async function POST(request) {
       description,
       price,
       image: imageUrl,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      eventOnly
     };
 
     // Update seller document

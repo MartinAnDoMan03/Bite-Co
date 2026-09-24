@@ -45,6 +45,12 @@ export async function GET(req, context) {
 
     // Get categories array from seller document
     let categories = [];
+
+    // Event only categories hiding
+    categories = categories
+      .map(cat => ({ ...cat, items: cat.items.filter(item => !item.eventOnly) }))
+      .filter(cat => cat.items.length > 0);
+
     if (eventId) {
       const eventItemIds = data.eventDetails?.[eventId]?.eventItemIds || [];
       categories = categories
