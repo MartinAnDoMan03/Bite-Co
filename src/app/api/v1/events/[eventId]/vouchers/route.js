@@ -21,10 +21,14 @@ export async function GET(req, { params }) {
 export async function POST(req, { params }) {
   try {
     const { eventId } = params;
-    const { code, sellerId, discountAmount, quota, minOrderAmount } = await req.json();
+    const { code, sellerId, discountAmount, quota, minOrderAmount, maxDiscountAmount, expiryMode, customExpiryDate } = await req.json();
 
     if(expiryMode === 'custom' && !customExpiryDate) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'Tanggal expired wajib diisi jika menggunakan tanggal sendiri' }, { status: 400 }));
+    }
+
+    if (maxDiscountAmount !== null && maxDiscountAmount !== undefined && maxDiscountAmount !== '' && Number(maxDiscountAmount) <= 0) {
+      return withCORSHeaders(NextResponse.json({ success: false, message: 'Maksimum diskon harus lebih dari 0 kalau diisi' }, { status: 400 }));
     }
 
     if (!code || !code.trim()) {
@@ -56,6 +60,7 @@ export async function POST(req, { params }) {
       discountAmount: Number(discountAmount),
       quota: (quota !== null && quota !== undefined && quota !== '') ? Number(quota) : null,
       minOrderAmount: (minOrderAmount !== null && minOrderAmount !== undefined && minOrderAmount !== '') ? Number(minOrderAmount) : null, 
+      maxDiscountAmount: (maxDiscountAmount !== null && maxDiscountAmount !== undefined && maxDiscountAmount !== '') ? Number(maxDiscountAmount) : null,
       usedCount: 0,
       isActive: true,
       createdAt: new Date().toISOString(),

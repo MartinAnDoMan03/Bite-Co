@@ -67,11 +67,12 @@ export async function POST(request) {
     }
 
     return withCORSHeaders(NextResponse.json({
-      valid: true,
-      voucherId: voucherDoc.id,
-      discountType: voucher.discountType,
-      discountAmount: voucher.discountAmount,
-      code: voucher.code,
+        valid: true,
+        voucherId: voucherDoc.id,
+        discountType: voucher.discountType,
+        discountAmount: voucher.discountAmount,
+        maxDiscountAmount: voucher.maxDiscountAmount,
+        code: voucher.code,
     }));
   } catch (e) {
     console.error('[Voucher Validate Error]', e);

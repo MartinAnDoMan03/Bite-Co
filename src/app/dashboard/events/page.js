@@ -19,7 +19,7 @@ export default function EventsPage() {
   const [vouchers, setVouchers] = useState([])
   const [vouchersLoading, setVouchersLoading] = useState(false)
   const [voucherEligibleSellers, setVoucherEligibleSellers] = useState([])
-  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '', minOrderAmount: '', noQuotaLimit: false, noMinOrder: true })
+  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '', minOrderAmount: '', noQuotaLimit: false, noMinOrder: true, expiryMode: 'event', customExpiryDate: '' })
   const [creatingVoucher, setCreatingVoucher] = useState(false)
 
   const [form, setForm] = useState({
@@ -32,6 +32,7 @@ export default function EventsPage() {
     termsAndConditions: '',
     themeColor: '#711330',
     sellerBannerImageUrl: '',
+    maxDiscountAmount: '', noMaxDiscount: true,
   })
 
   const inputStyle = "w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#711330]/30 bg-white";
@@ -236,6 +237,10 @@ export default function EventsPage() {
       alert('Kode dan diskon wajib diisi')
       return
     }
+    if (!voucherForm.noMaxDiscount && !voucherForm.maxDiscountAmount) {
+      alert('Isi maksimum diskon, atau centang Tanpa Batas Maksimum')
+      return
+    }
     if (!voucherForm.noQuotaLimit && !voucherForm.quota) {
       alert('Isi kuota, atau centang Tanpa Batas Kuota')
       return
@@ -250,18 +255,19 @@ export default function EventsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-         code: voucherForm.code,
-        sellerId: voucherForm.sellerId || null,
-        discountAmount: Number(voucherForm.discountAmount),
-        quota: voucherForm.noQuotaLimit ? null : Number(voucherForm.quota),
-        minOrderAmount: voucherForm.noMinOrder ? null : Number(voucherForm.minOrderAmount),
+          code: voucherForm.code,
+          sellerId: voucherForm.sellerId || null,
+          discountAmount: Number(voucherForm.discountAmount),
+          quota: voucherForm.noQuotaLimit ? null : Number(voucherForm.quota),
+          minOrderAmount: voucherForm.noMinOrder ? null : Number(voucherForm.minOrderAmount),
+          maxDiscountAmount: voucherForm.noMaxDiscount ? null : Number(voucherForm.maxDiscountAmount),
           expiryMode: voucherForm.expiryMode,
           customExpiryDate: voucherForm.expiryMode === 'custom' ? voucherForm.customExpiryDate : null,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        setVoucherForm({ code: '', sellerId: '', discountAmount: '', quota: '', expiryMode: 'event', customExpiryDate: '' })
+        setVoucherForm({ code: '', sellerId: '', discountAmount: '', quota: '', minOrderAmount: '', noQuotaLimit: false, noMinOrder: true, expiryMode: 'event', customExpiryDate: '' })
         const listRes = await fetch(`/api/v1/events/${vouchersModalEvent.id}/vouchers`)
         const listData = await listRes.json()
         if (listData.success) setVouchers(listData.vouchers)
@@ -645,6 +651,25 @@ export default function EventsPage() {
                     />
                   </div>
                   <div>
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Maksimum Diskon (Rp)</label>
+                    <input
+                      type="number"
+                      className={inputStyle}
+                      value={voucherForm.maxDiscountAmount}
+                      onChange={e => setVoucherForm(f => ({ ...f, maxDiscountAmount: e.target.value }))}
+                      placeholder="5000"
+                      disabled={voucherForm.noMaxDiscount}
+                    />
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5">
+                      <input
+                        type="checkbox"
+                        checked={voucherForm.noMaxDiscount}
+                        onChange={e => setVoucherForm(f => ({ ...f, noMaxDiscount: e.target.checked, maxDiscountAmount: e.target.checked ? '' : f.maxDiscountAmount }))}
+                      />
+                      Tanpa batas maksimum
+                    </label>
+                  </div>
+                  <div>
                     <label className="text-xs font-medium text-slate-600 block mb-1">Kuota Total</label>
                     <input
                       type="number"
@@ -743,7 +768,7 @@ export default function EventsPage() {
                           <div className="flex-1 min-w-0">
                             <p className="font-mono font-semibold text-slate-900">{v.code}</p>
                               <p className="text-xs text-slate-500">
-                                {v.discountAmount}% · {v.quota !== null ? `${v.usedCount}/${v.quota} terpakai` : `${v.usedCount} terpakai (tanpa batas)`} · {v.minOrderAmount ? `Min. Rp ${v.minOrderAmount.toLocaleString('id-ID')}` : 'Tanpa minimum'} · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
+                                {v.discountAmount}%{v.maxDiscountAmount ? ` (maks. Rp ${v.maxDiscountAmount.toLocaleString('id-ID')})` : ''} · {v.quota !== null ? `${v.usedCount}/${v.quota} terpakai` : `${v.usedCount} terpakai (tanpa batas)`} · {v.minOrderAmount ? `Min. Rp ${v.minOrderAmount.toLocaleString('id-ID')}` : 'Tanpa minimum'} · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
                               </p>
                           </div>
                           <button
