@@ -19,7 +19,7 @@ export default function EventsPage() {
   const [vouchers, setVouchers] = useState([])
   const [vouchersLoading, setVouchersLoading] = useState(false)
   const [voucherEligibleSellers, setVoucherEligibleSellers] = useState([])
-  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '', expiryMode: 'event', customExpiryDate: '' })
+  const [voucherForm, setVoucherForm] = useState({ code: '', sellerId: '', discountAmount: '', quota: '', minOrderAmount: '', noQuotaLimit: false, noMinOrder: true })
   const [creatingVoucher, setCreatingVoucher] = useState(false)
 
   const [form, setForm] = useState({
@@ -232,8 +232,16 @@ export default function EventsPage() {
   }
 
   const handleCreateVoucher = async () => {
-    if (!voucherForm.code.trim() || !voucherForm.discountAmount || !voucherForm.quota) {
-      alert('Kode, diskon, dan kuota wajib diisi')
+    if (!voucherForm.code.trim() || !voucherForm.discountAmount) {
+      alert('Kode dan diskon wajib diisi')
+      return
+    }
+    if (!voucherForm.noQuotaLimit && !voucherForm.quota) {
+      alert('Isi kuota, atau centang Tanpa Batas Kuota')
+      return
+    }
+    if (!voucherForm.noMinOrder && !voucherForm.minOrderAmount) {
+      alert('Isi minimum pembelian, atau centang Tanpa Minimum')
       return
     }
     setCreatingVoucher(true)
@@ -242,10 +250,11 @@ export default function EventsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          code: voucherForm.code,
-          sellerId: voucherForm.sellerId || null,
-          discountAmount: Number(voucherForm.discountAmount),
-          quota: Number(voucherForm.quota),
+         code: voucherForm.code,
+        sellerId: voucherForm.sellerId || null,
+        discountAmount: Number(voucherForm.discountAmount),
+        quota: voucherForm.noQuotaLimit ? null : Number(voucherForm.quota),
+        minOrderAmount: voucherForm.noMinOrder ? null : Number(voucherForm.minOrderAmount),
           expiryMode: voucherForm.expiryMode,
           customExpiryDate: voucherForm.expiryMode === 'custom' ? voucherForm.customExpiryDate : null,
         }),
@@ -643,7 +652,35 @@ export default function EventsPage() {
                       value={voucherForm.quota}
                       onChange={e => setVoucherForm(f => ({ ...f, quota: e.target.value }))}
                       placeholder="100"
+                      disabled={voucherForm.noQuotaLimit}
                     />
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5">
+                      <input
+                        type="checkbox"
+                        checked={voucherForm.noQuotaLimit}
+                        onChange={e => setVoucherForm(f => ({ ...f, noQuotaLimit: e.target.checked, quota: e.target.checked ? '' : f.quota }))}
+                      />
+                      Tanpa batas kuota
+                    </label>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 block mb-1">Minimum Pembelian (Rp)</label>
+                    <input
+                      type="number"
+                      className={inputStyle}
+                      value={voucherForm.minOrderAmount}
+                      onChange={e => setVoucherForm(f => ({ ...f, minOrderAmount: e.target.value }))}
+                      placeholder="50000"
+                      disabled={voucherForm.noMinOrder}
+                    />
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5">
+                      <input
+                        type="checkbox"
+                        checked={voucherForm.noMinOrder}
+                        onChange={e => setVoucherForm(f => ({ ...f, noMinOrder: e.target.checked, minOrderAmount: e.target.checked ? '' : f.minOrderAmount }))}
+                      />
+                      Tanpa minimum pembelian
+                    </label>
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-slate-600 block mb-1">Berlaku untuk</label>
@@ -705,9 +742,9 @@ export default function EventsPage() {
                         <div key={v.id} className="flex items-center gap-3 border border-slate-100 rounded-xl p-3">
                           <div className="flex-1 min-w-0">
                             <p className="font-mono font-semibold text-slate-900">{v.code}</p>
-                            <p className="text-xs text-slate-500">
-                              {v.discountAmount}% · {v.usedCount}/{v.quota} terpakai · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
-                            </p>
+                              <p className="text-xs text-slate-500">
+                                {v.discountAmount}% · {v.quota !== null ? `${v.usedCount}/${v.quota} terpakai` : `${v.usedCount} terpakai (tanpa batas)`} · {v.minOrderAmount ? `Min. Rp ${v.minOrderAmount.toLocaleString('id-ID')}` : 'Tanpa minimum'} · {v.sellerId ? `Khusus: ${scopedSeller?.name || 'Tenant tertentu'}` : 'Semua tenant'}
+                              </p>
                           </div>
                           <button
                             onClick={() => toggleVoucherActive(v)}

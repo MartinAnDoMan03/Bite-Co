@@ -21,7 +21,7 @@ export async function GET(req, { params }) {
 export async function POST(req, { params }) {
   try {
     const { eventId } = params;
-    const { code, sellerId, discountAmount, quota, expiryMode, customExpiryDate } = await req.json();
+    const { code, sellerId, discountAmount, quota, minOrderAmount } = await req.json();
 
     if(expiryMode === 'custom' && !customExpiryDate) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'Tanggal expired wajib diisi jika menggunakan tanggal sendiri' }, { status: 400 }));
@@ -34,8 +34,11 @@ export async function POST(req, { params }) {
     if (!discountAmount || discountAmount <= 0 || discountAmount > 100) {
       return withCORSHeaders(NextResponse.json({ success: false, message: 'Diskon harus antara 1-100%' }, { status: 400 }));
     }
-    if (!quota || quota <= 0) {
-      return withCORSHeaders(NextResponse.json({ success: false, message: 'Kuota harus lebih dari 0' }, { status: 400 }));
+    if (quota !== null && quota !== undefined && quota !== '' && Number(quota) <= 0) {
+      return withCORSHeaders(NextResponse.json({ success: false, message: 'Kuota harus lebih dari 0 kalau diisi' }, { status: 400 }));
+    }
+    if (minOrderAmount !== null && minOrderAmount !== undefined && minOrderAmount !== '' && Number(minOrderAmount) < 0) {
+      return withCORSHeaders(NextResponse.json({ success: false, message: 'Minimum pembelian tidak boleh negatif' }, { status: 400 }));
     }
 
     // Kode voucher unik secara global (bukan per-event), supaya lookup di sisi
@@ -51,7 +54,8 @@ export async function POST(req, { params }) {
       code: codeUpper,
       discountType: 'percentage',
       discountAmount: Number(discountAmount),
-      quota: Number(quota),
+      quota: (quota !== null && quota !== undefined && quota !== '') ? Number(quota) : null,
+      minOrderAmount: (minOrderAmount !== null && minOrderAmount !== undefined && minOrderAmount !== '') ? Number(minOrderAmount) : null, 
       usedCount: 0,
       isActive: true,
       createdAt: new Date().toISOString(),

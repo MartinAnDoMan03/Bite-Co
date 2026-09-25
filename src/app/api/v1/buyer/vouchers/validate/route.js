@@ -23,7 +23,7 @@ export async function POST(request) {
     }
     const buyerId = buyerData.id;
 
-    const { code, eventId, sellerId } = await request.json();
+    const { code, eventId, sellerId, orderAmount } = await request.json();
     if (!code || !eventId) {
       return withCORSHeaders(NextResponse.json({ valid: false, message: 'Kode dan event wajib diisi' }, { status: 400 }));
     }
@@ -50,8 +50,11 @@ export async function POST(request) {
     if (voucher.sellerId && voucher.sellerId !== sellerId) {
       return withCORSHeaders(NextResponse.json({ valid: false, message: 'Voucher ini hanya berlaku untuk tenant tertentu' }));
     }
-    if (voucher.usedCount >= voucher.quota) {
-      return withCORSHeaders(NextResponse.json({ valid: false, message: 'Kuota voucher sudah habis' }));
+    if (voucher.minOrderAmount && (orderAmount === undefined || orderAmount < voucher.minOrderAmount)) {
+    return withCORSHeaders(NextResponse.json({ valid: false, message: `Minimum pembelian Rp ${voucher.minOrderAmount.toLocaleString('id-ID')} untuk pakai voucher ini` }));
+    }
+    if (voucher.quota !== null && voucher.usedCount >= voucher.quota) {
+    return withCORSHeaders(NextResponse.json({ valid: false, message: 'Kuota voucher sudah habis' }));
     }
 
     const redemptionSnap = await db.collection('voucherRedemptions')

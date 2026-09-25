@@ -280,7 +280,16 @@ export async function POST(request) {
           }
           if (voucher.eventId !== orderData.eventId) throw new Error('Voucher tidak berlaku untuk event ini');
           if (voucher.sellerId && voucher.sellerId !== orderData.sellerId) throw new Error('Voucher ini hanya berlaku untuk tenant tertentu');
-          if (voucher.usedCount >= voucher.quota) throw new Error('Kuota voucher sudah habis');
+      
+          if (voucher.quota !== null && voucher.usedCount >= voucher.quota) throw new Error('Kuota voucher sudah habis');
+
+          const subtotal = (orderData.items || []).reduce(
+            (sum, item) => sum + (item.price || 0) * (item.qty || item.quantity || 1),
+            0
+          );
+          if (voucher.minOrderAmount && subtotal < voucher.minOrderAmount) {
+            throw new Error(`Minimum pembelian Rp ${voucher.minOrderAmount.toLocaleString('id-ID')} untuk pakai voucher ini`);
+          }
 
           const redemptionQuery = await tx.get(
             db.collection('voucherRedemptions')
