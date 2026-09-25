@@ -84,6 +84,8 @@ export async function POST(request) {
         rejectionReason: rejectionReason || 'Rejected by seller',
         updatedAt: new Date().toISOString()
       });
+
+      await releaseVoucherIfCancelled(orderId, orderData);
       
       await notifyUser({
         userType: 'buyer',

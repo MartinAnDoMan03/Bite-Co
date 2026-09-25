@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { db } from '../../../lib/firebase'
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore'
+import { collection, onSnapshot } from 'firebase/firestore'
 import { safeToISOString } from '../../../lib/dateUtils'
 
 // Map payment status and delivery status to display status
@@ -165,59 +165,16 @@ export default function OrdersPage() {
       setUpdatingOrder(orderId) // Set loading state
       console.log(`Updating order ${orderId} to status: ${newStatus}`)
       
-      // Update order status in Firebase
-      const orderRef = doc(db, 'orders', orderId)
-      
-      // Map display status to appropriate fields
-      let updateData = {
-        updatedAt: new Date()
+      const res = await fetch(`/api/v1/admin/orders/${orderId}/update-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newStatus }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        throw new Error(data.message || data.error || 'Gagal update status')
       }
-      
-      switch (newStatus) {
-        case 'confirmed':
-          updateData.status = 'success' // Payment confirmed
-          updateData.statusProgress = 'awaiting_seller_approval' // Go to seller approval first
-          console.log('Payment confirmed, awaiting seller approval for order:', orderId)
-          break
-        case 'awaiting_approval':
-          updateData.status = 'success' // Payment already confirmed
-          updateData.statusProgress = 'awaiting_seller_approval' // Explicitly set to awaiting approval
-          console.log('Setting order to awaiting seller approval:', orderId)
-          break
-        case 'approved':
-          updateData.status = 'success'
-          updateData.statusProgress = 'approved' // Stays in its own "Disetujui" bucket, doesn't jump to confirmed/processing
-          updateData.approvedAt = new Date()
-          console.log('Seller approved order:', orderId)
-          break
-        case 'rejected':
-          updateData.status = 'failed'
-          updateData.statusProgress = 'rejected' // Stays in its own "Ditolak" bucket, separate from admin-cancelled
-          updateData.rejectedAt = new Date()
-          console.log('Seller rejected order:', orderId)
-          break
-        case 'delivered':
-          updateData.status = 'success'
-          updateData.statusProgress = 'completed'
-          updateData.deliveredAt = new Date()
-          console.log('Marking order as delivered:', orderId)
-          break
-        case 'cancelled':
-          updateData.status = 'failed'
-          updateData.statusProgress = 'cancelled'
-          updateData.cancelledAt = new Date()
-          console.log('Cancelling order:', orderId)
-          break
-        case 'pending':
-          updateData.status = 'pending'
-          updateData.statusProgress = 'pending'
-          break
-        default:
-          updateData.status = newStatus
-      }
-      
-      console.log('Update data:', updateData)
-      await updateDoc(orderRef, updateData)
+
       console.log('Order status updated successfully')
       
       // Show success message

@@ -2,6 +2,7 @@ import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { createSuccessResponse, createErrorResponse } from '@/lib/auth';
 import { db } from '@/firebase/configure';
 import { verifyBuyerToken } from '@/middleware/buyerAuth';
+import { releaseVoucherIfCancelled } from '@/lib/voucherRedemption';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -70,6 +71,8 @@ export async function PATCH(request, { params }) {
       cancelledBy: 'buyer',
       updatedAt: new Date().toISOString(),
     });
+
+    await releaseVoucherIfCancelled(orderId, orderData);
 
     return withCORSHeaders(
       createSuccessResponse({ orderId, status: 'cancelled', statusProgress: 'cancelled' }, 'Order cancelled successfully')
