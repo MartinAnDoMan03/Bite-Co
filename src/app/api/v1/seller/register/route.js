@@ -25,9 +25,9 @@ export async function POST(request) {
     const productHalal = formData.get('productHalal') === '1';
 
     // Validate required fields
-    if (!outletName || !outletPhone || !outletEmail || !bankName || 
-        !bankAccountNumber || !ktpFile || !selfieFile || !password || 
-        !agreedTerms || !productHalal) {
+      if (!outletName || !outletPhone || !outletEmail || !bankName || 
+          !bankAccountNumber || !ktpFile || !selfieFile || !password || 
+          !agreedTerms) {
       return withCORSHeaders(NextResponse.json(
         { success: false, message: 'All required fields must be provided' },
         { status: 400 }
