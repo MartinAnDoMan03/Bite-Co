@@ -5,6 +5,7 @@ import midtransClient from 'midtrans-client';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { notifyUser } from '@/lib/notifications';
 import { isVoucherExpired } from '@/lib/voucherValidation';
+import crypto from 'crypto';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -349,6 +350,7 @@ export async function POST(request) {
       sellerPinAddress: sellerData?.pinAddress || null,
       distance: distance,
       voucherId: appliedVoucherId,
+      invoiceToken: crypto.randomUUID(),
     };
 
     const orderRef = await db.collection('orders').add(newOrder);

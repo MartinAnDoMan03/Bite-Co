@@ -237,11 +237,11 @@ export default function PayoutPage() {
                                     {shortId}...
                                   </td>
                                   <td className="py-2 text-gray-600">{e.buyerName || '-'}</td>
-                                  <td className="py-2 text-gray-600">{formatRupiah(e.adminFee)} || 0</td>
-                                  <td className="py-2 text-gray-600">{formatRupiah(e.grossAmount)}</td>
-                                  <td className="py-2 text-gray-400">{formatRupiah(e.platformFee)}</td>
+                                  <td className="py-2 text-gray-600">{formatRupiah(e.adminFee  || 0)}</td>
+                                  <td className="py-2 text-gray-600">{formatRupiah(e.grossAmount || 0)}</td>
+                                  <td className="py-2 text-gray-400">{formatRupiah(e.platformFee || 0)}</td>
                                   <td className="py-2 font-medium text-gray-900">
-                                    {formatRupiah(e.netAmount)}
+                                    {formatRupiah(e.netAmount || 0)}
                                   </td>
                                   <td className="py-2 text-right">
                                     {isPaidTab ? (
