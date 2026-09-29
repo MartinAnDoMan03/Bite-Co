@@ -26,5 +26,6 @@ export default async function InvoicePage({ params, searchParams }) {
     );
   }
 
-  return <InvoiceView order={order} />;
+  const plainOrder = JSON.parse(JSON.stringify(order));
+    return <InvoiceView order={plainOrder} />;
 }
