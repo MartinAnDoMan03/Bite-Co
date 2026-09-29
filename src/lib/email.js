@@ -221,3 +221,66 @@ export async function sendAccountDeletionNotice(email, phone, reason) {
     return false;
   }
 }
+
+/**
+ * Notify buyer their manual QRIS payment was approved, with a link to view/download the invoice
+ * @param {string} email - Buyer's email
+ * @param {string} name - Buyer's name
+ * @param {string} orderId - The order ID
+ * @param {string} invoiceUrl - Full URL to the invoice page
+ */
+export async function sendPaymentApprovedEmail(email, name, orderId, invoiceUrl) {
+  try {
+    const mailOptions = {
+      from: {
+        name: 'BiteAndCo',
+        address: 'no-reply@biteandco.id',
+      },
+      to: email,
+      subject: 'Pembayaran Dikonfirmasi - BiteAndCo',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Pembayaran Dikonfirmasi - BiteAndCo</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #711330; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 26px;">✅ Pembayaran Dikonfirmasi</h1>
+          </div>
+
+          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="color: #333; margin-top: 0;">Halo ${name || 'Buyer'}!</h2>
+
+            <p>Pembayaran kamu untuk pesanan <strong>#${orderId.slice(0, 12)}</strong> sudah kami konfirmasi dan pesanan sedang diproses penjual.</p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${invoiceUrl}" style="background: #711330; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Lihat &amp; Unduh Invoice</a>
+            </div>
+
+            <p style="font-size: 14px; color: #666;">Kamu juga bisa melihat status pesanan langsung dari aplikasi Bite&amp;Co.</p>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
+            <div style="text-align: center; color: #666; font-size: 14px;">
+              <p>Terima kasih telah menggunakan Bite&amp;Co.<br><strong>Tim BiteAndCo</strong></p>
+              <p style="margin-top: 20px;">
+                <a href="https://www.biteandco.id" style="color: #711330; text-decoration: none;">www.biteandco.id</a> |
+                <a href="mailto:support@bokteandco.id" style="color: #711330; text-decoration: none;">support@biteandco.id</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return true;
+  } catch (error) {
+    console.error('Error sending payment approved email:', error);
+    return false;
+  }
+}
