@@ -268,7 +268,7 @@ export async function sendPaymentApprovedEmail(email, name, orderId, invoiceUrl)
               <p>Terima kasih telah menggunakan Bite&amp;Co.<br><strong>Tim BiteAndCo</strong></p>
               <p style="margin-top: 20px;">
                 <a href="https://www.biteandco.id" style="color: #711330; text-decoration: none;">www.biteandco.id</a> |
-                <a href="mailto:support@bokteandco.id" style="color: #711330; text-decoration: none;">support@biteandco.id</a>
+                <a href="mailto:support@biteandco.id" style="color: #711330; text-decoration: none;">support@biteandco.id</a>
               </p>
             </div>
           </div>
