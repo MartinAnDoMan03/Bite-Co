@@ -2,6 +2,7 @@ import { db, storage } from '@/firebase/configure';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
+import { notifyAdmin } from '@/lib/notifications';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -88,6 +89,13 @@ export async function POST(request) {
     };
 
     await db.collection('sellers').doc(sellerId).set(sellerData);
+
+    await notifyAdmin({
+      type: 'seller_registration',
+      title: 'Pendaftaran Seller Baru',
+      message: `${outletName} baru saja mendaftar dan menunggu persetujuan.`,
+      data: { sellerId, link: '/dashboard/approvals' },
+    });
 
     return withCORSHeaders(NextResponse.json({
       success: true,

@@ -1,0 +1,44 @@
+import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
+import { app, db } from './firebase';
+import { doc, setDoc } from 'firebase/firestore';
+
+const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+
+// Asks for notification permission, registers the service worker, gets an
+// FCM token for this browser, and saves it straight to Firestore — same
+// direct-write pattern the rest of this dashboard already uses (see
+// dashboard/approvals/page.js's updateDoc calls). No JWT check here since
+// there's only one shared admin login and no per-admin identity to verify.
+export async function setupAdminPushNotifications() {
+  if (typeof window === 'undefined') return;
+  if (!(await isSupported())) return;
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration,
+    });
+
+    if (token) {
+      await setDoc(doc(db, 'adminPushTokens', token), {
+        registeredAt: new Date().toISOString(),
+      });
+    }
+
+    // Foreground messages (tab open) don't trigger the service worker's
+    // onBackgroundMessage — show a browser notification for those too.
+    onMessage(messaging, (payload) => {
+      const { title, body } = payload.notification || {};
+      if (title && Notification.permission === 'granted') {
+        new Notification(title, { body });
+      }
+    });
+  } catch (error) {
+    console.error('Admin push notification setup failed:', error);
+  }
+}

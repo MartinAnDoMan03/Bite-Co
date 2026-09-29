@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import { adminLogout } from '../lib/auth'
+import { setupAdminPushNotifications } from '../lib/adminPush'
+import NotificationBell from './NotificationBell'
 
 export default function DashboardLayout({ children }) {
   const [user, setUser] = useState(null)
@@ -22,6 +24,7 @@ export default function DashboardLayout({ children }) {
           setUser(currentUser)
         }
         setLoading(false)
+        setupAdminPushNotifications();
       } else {
         // No user is signed in, redirect to login
         router.push('/login')
@@ -64,6 +67,7 @@ export default function DashboardLayout({ children }) {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <NotificationBell />
               <span className="text-sm text-gray-700">
                 Welcome, {user.username || user.email}
               </span>

@@ -22,14 +22,19 @@ export async function POST(request) {
       return withCORSHeaders(createErrorResponse('Invalid seller token', 401));
     }
 
-    const { pushToken } = await request.json();
+    const { pushToken, platform } = await request.json();
 
     if (!pushToken) {
       return withCORSHeaders(createErrorResponse('Missing pushToken', 400));
     }
 
+    // platform: 'web' registers an FCM web push token (browser push);
+    // anything else (or omitted, for existing mobile clients) keeps the
+    // original Expo push token behavior.
+    const tokenField = platform === 'web' ? 'webPushToken' : 'expoPushToken';
+
     await db.collection('sellers').doc(sellerId).update({
-      expoPushToken: pushToken,
+      [tokenField]: pushToken,
       pushTokenUpdatedAt: new Date().toISOString(),
     });
 

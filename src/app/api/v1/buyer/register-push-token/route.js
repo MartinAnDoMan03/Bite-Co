@@ -19,14 +19,16 @@ export async function POST(request) {
     }
 
     const { buyerId } = authResult;
-    const { pushToken } = await request.json();
+    const { pushToken, platform } = await request.json();
 
     if (!pushToken) {
       return withCORSHeaders(createErrorResponse('Missing pushToken', 400));
     }
 
+    const tokenField = platform === 'web' ? 'webPushToken' : 'expoPushToken';
+
     await db.collection('buyers').doc(buyerId).update({
-      expoPushToken: pushToken,
+      [tokenField]: pushToken,
       pushTokenUpdatedAt: new Date().toISOString(),
     });
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, storage } from "@/firebase/configure";  // ← ini baris yang di-import DARI configure.js kamu
 import { verifyToken } from '@/lib/auth';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
-import { notifyUser } from '@/lib/notifications';
+import { notifyUser, notifyAdmin } from '@/lib/notifications';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -45,6 +45,13 @@ export async function POST(req, { params }) {
       paymentStatus: 'pending_verification',
       paymentProofUploadedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+    });
+
+    await notifyAdmin({
+      type: 'payment_verification',
+      title: 'Bukti Pembayaran Menunggu Verifikasi',
+      message: `Order #${orderId} mengunggah bukti pembayaran manual QRIS.`,
+      data: { orderId, link: '/dashboard/payments' },
     });
 
     return withCORSHeaders(NextResponse.json({ success: true, paymentProofUrl: url }));

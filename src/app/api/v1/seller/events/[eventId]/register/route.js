@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/firebase/configure";
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifySellerToken } from '@/middleware/sellerAuth';
-
+import { notifyAdmin } from '@/lib/notifications';
 export async function OPTIONS() {
   return handleOptions();
 }
@@ -97,6 +97,13 @@ export async function POST(request, { params }) {
       eventCategory,
       eventDescription: eventDescription.trim(),
       registeredAt: new Date().toISOString(),
+    });
+
+    await notifyAdmin({
+      type: 'event_registration',
+      title: 'Pendaftaran Event Baru',
+      message: `Seller mendaftar untuk event ini dan menunggu persetujuan.`,
+      data: { eventId, sellerId, link: '/dashboard/events' },
     });
 
     return withCORSHeaders(NextResponse.json({
