@@ -122,8 +122,7 @@ export default function AnalyticsPage() {
       // rendered anywhere, just a placeholder number sitting in state.
       const categoryStats = {}
       successfulOrders.forEach(order => {
-        const seller = rawSellers.find(s => s.id === order.sellerId)
-        const category = seller?.category || seller?.businessCategory || 'Other'
+        const category = order.orderType || 'Lainnya'
         if (!categoryStats[category]) categoryStats[category] = { orders: 0, revenue: 0 }
         categoryStats[category].orders += 1
         categoryStats[category].revenue += order.totalAmount || 0
@@ -161,7 +160,7 @@ export default function AnalyticsPage() {
       const orderTrends = []
       for (let i = 5; i >= 0; i--) {
         const startDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0)
+        const endDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999)
         const monthOrders = rawOrders.filter(order => {
           const orderDate = getDate(order.createdAt)
           return order.status === 'success' && order.statusProgress === 'completed' &&
@@ -418,7 +417,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Revenue by Category */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Revenue by Category ({timeRange})</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Revenue by Order Type ({timeRange})</h3>
           <div className="space-y-3">
             {analytics.revenueData.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-6">No data for this period.</p>

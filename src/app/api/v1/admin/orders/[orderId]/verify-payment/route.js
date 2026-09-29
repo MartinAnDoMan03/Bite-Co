@@ -4,6 +4,8 @@ import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { verifyAdminToken } from '@/middleware/adminAuth';
 import { notifyUser } from '@/lib/notifications';
 import { createEarningIfCompleted } from '@/lib/sellerEarnings';
+import { sendPaymentApprovedEmail } from '@/lib/email';
+import crypto from 'crypto';
 
 export async function OPTIONS() {
   return handleOptions();
@@ -46,6 +48,16 @@ export async function POST(req, { params }) {
       // Midtrans yang biasanya melakukan ini. orderData yang dioper harus
       // sudah punya sellerId & totalAmount (sudah ada dari order asli).
       await createEarningIfCompleted(orderId, orderData, 'success');
+      let invoiceToken = orderData.invoiceToken;
+      if (!invoiceToken) {
+        invoiceToken = crypto.randomUUID();
+        await orderRef.update({ invoiceToken });
+      }
+
+      if (orderData.buyerEmail) {
+        const invoiceUrl = `https://admin.biteandco.id/invoice/${orderId}?token=${invoiceToken}`;
+        await sendPaymentApprovedEmail(orderData.buyerEmail, orderData.buyerName, orderId, invoiceUrl);
+      }
       await notifyUser({
         userType: 'buyer',
         userId: orderData.buyerId,
