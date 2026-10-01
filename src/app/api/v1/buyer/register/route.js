@@ -2,6 +2,7 @@ import { db } from '@/firebase/configure';
 import { createErrorResponse, createSuccessResponse } from '@/lib/auth';
 import { withCORSHeaders, handleOptions } from '@/lib/cors';
 import { sendOTPEmail } from '@/lib/email';
+import bcrypt from 'bcryptjs';
 
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -26,20 +27,50 @@ export async function POST(request) {
       .get();
 
     if (!buyersSnapshot.empty) {
-      return withCORSHeaders(createErrorResponse('Email already registered', 400));
+      const existingDoc = buyersSnapshot.docs[0];
+      const existingData = existingDoc.data();
+
+      
+      if (existingData.emailValidated) {
+        return withCORSHeaders(createErrorResponse('Email already registered', 400));
+      }
+
+      const otp = generateOTP();
+      const otpExpiry = new Date();
+      otpExpiry.setMinutes(otpExpiry.getMinutes() + 5);
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      await existingDoc.ref.update({
+        name,
+        phone,
+        password: hashedPassword,
+        otp,
+        otpExpiry: otpExpiry.toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const emailSent = await sendOTPEmail(email, otp, name);
+      if (!emailSent) {
+        return withCORSHeaders(createErrorResponse('Registrasi berhasil, tapi gagal mengirim email OTP. Silakan hubungi admin.', 500));
+      }
+
+      return withCORSHeaders(createSuccessResponse({
+        userId: existingDoc.id
+      }, 'Registration successful. Please check your email for OTP.'));
     }
 
     // Generate OTP
     const otp = generateOTP();
     const otpExpiry = new Date();
-    otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); // OTP expires in 5 minutes
+    otpExpiry.setMinutes(otpExpiry.getMinutes() + 5); 
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create new buyer document
     const buyerRef = await db.collection('buyers').add({
       name,
       email,
       phone,
-      password, // Note: In production, hash the password before storing
+      password: hashedPassword,
       emailValidated: false,
       phoneValidated: false,
       otp,
